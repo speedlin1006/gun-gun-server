@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true })
 
 // model 名稱 'User'，指定 collection 為 'login'
-const User = mongoose.model('User', userSchema, 'login')
+const User = mongoose.model('User', userSchema, 'logins')
 
 /* -------------------- Gun 相關 API（原本的） -------------------- */
 
