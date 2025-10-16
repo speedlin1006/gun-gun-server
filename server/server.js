@@ -27,6 +27,7 @@ const userSchema = new mongoose.Schema({
   account: { type: String, required: true, unique: true },
   password: { type: String, required: true }, // 目前為明文（建議改為 hashed）
   name: { type: String, required: true },
+  guild: { type: String, required: false },
 }, { timestamps: true })
 
 // model 名稱 'User'，指定 collection 為 'login'
@@ -112,6 +113,7 @@ app.post('/api/register', async (req, res) => {
       _id: newUser._id,
       account: newUser.account,
       name: newUser.name,
+      guild: newUser.guild,
       createdAt: newUser.createdAt
     }
 
@@ -148,6 +150,7 @@ app.post('/api/login', async (req, res) => {
       _id: user._id,
       account: user.account,
       name: user.name,
+      guild: user.guild,
       createdAt: user.createdAt
     }
 
