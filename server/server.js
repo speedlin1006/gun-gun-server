@@ -2,7 +2,7 @@ import express from "express"
 import mongoose from "mongoose"
 import cors from "cors"
 import dotenv from "dotenv"
-import rateLimit from "express-rate-limit"   
+import rateLimit from "express-rate-limit"
 import Gun from "./models/gunModel.js"
 
 dotenv.config()
@@ -11,14 +11,8 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 
-/* ------------------ 🔒 防暴力登入攻擊 ------------------ */
-const loginLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 分鐘
-  max: 5, // 同 IP 最多嘗試 5 次
-  message: { success: false, message: "嘗試次數過多，請 5 分鐘後再試" },
-  standardHeaders: true,
-  legacyHeaders: false,
-})
+// ✅ 告訴 Express 在 Render 環境信任 proxy（修正 rate-limit 錯誤）
+app.set("trust proxy", 1)
 
 /* ------------------ 🌐 CORS 設定 ------------------ */
 const allowedOrigins = [
@@ -38,6 +32,17 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }))
 
+// ✅ 一定要在 rate-limit 之前啟用 JSON 解析！
+app.use(express.json())
+
+/* ------------------ 🔒 防暴力登入攻擊 ------------------ */
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 分鐘
+  max: 5, // 同 IP 最多嘗試 5 次
+  message: { success: false, message: "嘗試次數過多，請 5 分鐘後再試" },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 /* ------------------ 🧩 MongoDB 連線 ------------------ */
 mongoose
@@ -114,9 +119,8 @@ app.get("/api/guns", async (req, res) => {
 app.post("/api/borrow", async (req, res) => {
   try {
     const { guildName, memberName, gunName } = req.body
-    if (!guildName || !memberName || !gunName) {
+    if (!guildName || !memberName || !gunName)
       return res.status(400).json({ error: "缺少必要欄位" })
-    }
 
     const newRecord = await Gun.create({
       guildName,
