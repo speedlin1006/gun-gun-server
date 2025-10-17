@@ -17,7 +17,7 @@ app.set("trust proxy", 1)
 /* ------------------ 🌐 CORS 設定 ------------------ */
 const allowedOrigins = [
   "http://localhost:5173",        // 本地開發
-  "https://gun-guild.netlify.app/login" // 正式上線網址
+  "https://gun-guild.netlify.app" // 正式上線網址
 ]
 
 app.use(cors({
