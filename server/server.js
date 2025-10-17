@@ -11,10 +11,10 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 
-// ✅ 告訴 Express 在 Render 環境信任 proxy（修正 rate-limit 錯誤）
+// 告訴 Express 在 Render 環境信任 proxy（修正 rate-limit 錯誤）
 app.set("trust proxy", 1)
 
-/* ------------------ 🌐 CORS 設定 ------------------ */
+/*CORS 設定 */
 const allowedOrigins = [
   "http://localhost:5173",        // 本地開發
   "https://gun-guild.netlify.app" // 正式上線網址
@@ -32,10 +32,10 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }))
 
-// ✅ 一定要在 rate-limit 之前啟用 JSON 解析！
+
 app.use(express.json())
 
-/* ------------------ 🔒 防暴力登入攻擊 ------------------ */
+/*防暴力登入攻擊*/
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 分鐘
   max: 5, // 同 IP 最多嘗試 5 次
@@ -44,7 +44,7 @@ const loginLimiter = rateLimit({
   legacyHeaders: false,
 })
 
-/* ------------------ 🧩 MongoDB 連線 ------------------ */
+/*MongoDB 連線*/
 mongoose
   .connect(process.env.MONGODB_URI)
   .then(() => console.log("✅ 成功連線至 MongoDB Atlas"))
@@ -60,7 +60,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema, "logins")
 
-/* ------------------ 🪶 Discord Webhook 通知 ------------------ */
+/*Discord Webhook 通知*/
 async function sendDiscordMessage(action, payload) {
   if (!DISCORD_WEBHOOK_URL) {
     console.warn("⚠️ 未設定 Discord Webhook URL，略過通知")
@@ -71,7 +71,7 @@ async function sendDiscordMessage(action, payload) {
     const title = action === "borrow" ? "🔫 槍枝借出紀錄" : "♻️ 槍枝歸還紀錄"
     const color = action === "borrow" ? 0xfbbf24 : 0x22c55e
 
-    // ✅ 在這裡宣告台灣時區時間
+    //台灣時區時間
     const taiwanTime = new Date().toLocaleString("zh-TW", {
       timeZone: "Asia/Taipei",
       hour12: false
@@ -86,7 +86,7 @@ async function sendDiscordMessage(action, payload) {
             { name: "幫會", value: payload.guildName || "未知", inline: true },
             { name: "成員", value: payload.memberName || "未知", inline: true },
             { name: "槍枝", value: payload.gunName || "未知", inline: true },
-            { name: "時間", value: taiwanTime, inline: false } // ✅ 這裡就能用了
+            { name: "時間", value: taiwanTime, inline: false }
           ],
           footer: { text: "槍枝借還系統自動通知" },
           timestamp: new Date().toISOString()
@@ -112,7 +112,7 @@ async function sendDiscordMessage(action, payload) {
 }
 
 
-/* ------------------ 📡 API 區塊 ------------------ */
+/*API 區塊*/
 
 // 槍枝紀錄
 app.get("/api/guns", async (req, res) => {
@@ -125,28 +125,47 @@ app.get("/api/guns", async (req, res) => {
 })
 
 // 借出槍枝
+// 借出槍枝（防止同時借出）
 app.post("/api/borrow", async (req, res) => {
   try {
     const { guildName, memberName, gunName } = req.body
     if (!guildName || !memberName || !gunName)
       return res.status(400).json({ error: "缺少必要欄位" })
 
-    const newRecord = await Gun.create({
-      guildName,
-      memberName,
-      gunName,
-      status: "borrowed",
-      borrowTime: new Date(),
-    })
+    // ✅ 原子操作：一次查找＋更新
+    const result = await Gun.findOneAndUpdate(
+      {
+        gunName,
+        status: { $ne: "borrowed" } // 只允許目前不是「借出中」的槍
+      },
+      {
+        $set: {
+          guildName,
+          memberName,
+          status: "borrowed",
+          borrowTime: new Date(),
+          returnTime: null
+        }
+      },
+      {
+        new: true,
+        upsert: false
+      }
+    )
+
+    if (!result) {
+      return res.status(400).json({ error: `槍枝「${gunName}」已被借出或不存在！` })
+    }
 
     sendDiscordMessage("borrow", {
       guildName,
       memberName,
       gunName,
-      time: newRecord.borrowTime.toLocaleString("zh-TW")
+      time: result.borrowTime.toLocaleString("zh-TW")
     })
 
-    res.json(newRecord)
+    res.json({ success: true, message: "成功借出", data: result })
+
   } catch (err) {
     console.error("借槍失敗：", err)
     res.status(500).json({ error: "借槍失敗" })
@@ -177,7 +196,7 @@ app.post("/api/return/:id", async (req, res) => {
   }
 })
 
-/* ------------------ 👤 使用者帳號 ------------------ */
+/*使用者帳號*/
 
 // 註冊
 app.post("/api/register", async (req, res) => {
@@ -206,7 +225,7 @@ app.post("/api/register", async (req, res) => {
   }
 })
 
-// 登入 (防暴力登入)
+// (防暴力登入)
 app.post("/api/login", loginLimiter, async (req, res) => {
   try {
     const { account, password } = req.body
@@ -232,5 +251,5 @@ app.post("/api/login", loginLimiter, async (req, res) => {
   }
 })
 
-/* ------------------ 🚀 啟動伺服器 ------------------ */
+/*啟動伺服器*/
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`))
