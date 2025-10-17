@@ -21,12 +21,23 @@ const loginLimiter = rateLimit({
 })
 
 /* ------------------ 🌐 CORS 設定 ------------------ */
+const allowedOrigins = [
+  "http://localhost:5173",        // 本地開發
+  "https://gun-guild.netlify.app" // 正式上線網址
+]
+
 app.use(cors({
-  origin: "http://localhost:5173", // 前端開發環境
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error("CORS 不允許的來源：" + origin))
+    }
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }))
-app.use(express.json())
+
 
 /* ------------------ 🧩 MongoDB 連線 ------------------ */
 mongoose
