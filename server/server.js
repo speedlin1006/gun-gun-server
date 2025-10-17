@@ -16,24 +16,21 @@ app.use(express.json())
 // connect MongoDB
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log("✅ 成功連線至 MongoDB Atlas"))
-  .catch((err) => console.error("❌ MongoDB 連線失敗：", err))
+  .then(() => console.log("連線至 MongoDB Atlas"))
+  .catch((err) => console.error("MongoDB 連線失敗：", err))
 
-/**
- * User schema（放在此檔案，collection 名稱為 'login'）
- * 若未來需要可以拆成 models/userModel.js
- */
+
 const userSchema = new mongoose.Schema({
   account: { type: String, required: true, unique: true },
-  password: { type: String, required: true }, // 目前為明文（建議改為 hashed）
+  password: { type: String, required: true }, 
   name: { type: String, required: true },
   guild: { type: String, required: false },
 }, { timestamps: true })
 
-// model 名稱 'User'，指定 collection 為 'login'
+
 const User = mongoose.model('User', userSchema, 'logins')
 
-/* -------------------- Gun 相關 API（原本的） -------------------- */
+
 
 // 取得所有紀錄
 app.get("/api/guns", async (req, res) => {
@@ -45,7 +42,7 @@ app.get("/api/guns", async (req, res) => {
   }
 })
 
-// 借出槍枝（新增一筆）
+// 借出
 app.post("/api/borrow", async (req, res) => {
   try {
     const { guildName, memberName, gunName } = req.body
@@ -68,7 +65,7 @@ app.post("/api/borrow", async (req, res) => {
   }
 })
 
-// 歸還槍枝（更新現有紀錄）
+// 歸還
 app.post("/api/return/:id", async (req, res) => {
   try {
     const record = await Gun.findById(req.params.id)
@@ -85,14 +82,7 @@ app.post("/api/return/:id", async (req, res) => {
   }
 })
 
-/* -------------------- 新增：使用者註冊/登入 API -------------------- */
 
-/**
- * 註冊（建立帳號）
- * 範例：POST /api/register
- * body: { account, password, name }
- * 注意：目前為簡易註冊（密碼明文存），建議後續改用 bcrypt 雜湊。
- */
 app.post('/api/register', async (req, res) => {
   try {
     const { account, password, name } = req.body
@@ -124,13 +114,7 @@ app.post('/api/register', async (req, res) => {
   }
 })
 
-/**
- * 登入（比對帳號與密碼）
- * 範例：POST /api/login
- * body: { account, password }
- * 成功回傳 { success: true, user }
- * 失敗回傳 401 與錯誤訊息
- */
+
 app.post('/api/login', async (req, res) => {
   try {
     const { account, password } = req.body
@@ -163,4 +147,4 @@ app.post('/api/login', async (req, res) => {
 
 /* --------------------------------------------------------------- */
 
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`))
+app.listen(PORT, () => console.log(` Server running on port ${PORT}`))

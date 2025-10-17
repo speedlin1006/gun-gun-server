@@ -1,4 +1,4 @@
-// server/models/userModel.js
+//上傳users.json哪些資料置資料庫logins
 import mongoose from "mongoose"
 
 const userSchema = new mongoose.Schema({
@@ -21,7 +21,7 @@ const userSchema = new mongoose.Schema({
   }
 })
 
-// 模型名稱叫 "User"，會對應資料庫的 "users" 集合
+
 const User = mongoose.model("login", userSchema)
 
 export default User
