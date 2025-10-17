@@ -2,6 +2,7 @@ import express from "express"
 import mongoose from "mongoose"
 import cors from "cors"
 import dotenv from "dotenv"
+import rateLimit from "express-rate-limit"   
 import Gun from "./models/gunModel.js"
 
 dotenv.config()
@@ -10,17 +11,30 @@ const app = express()
 const PORT = process.env.PORT || 3000
 const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL
 
-// middleware
-app.use(cors())
+/* ------------------ 🔒 防暴力登入攻擊 ------------------ */
+const loginLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 分鐘
+  max: 5, // 同 IP 最多嘗試 5 次
+  message: { success: false, message: "嘗試次數過多，請 5 分鐘後再試" },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+/* ------------------ 🌐 CORS 設定 ------------------ */
+app.use(cors({
+  origin: "http://localhost:5173", // 前端開發環境
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}))
 app.use(express.json())
 
-// connect MongoDB
+/* ------------------ 🧩 MongoDB 連線 ------------------ */
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log(" 成功連線至 MongoDB Atlas"))
-  .catch((err) => console.error("MongoDB 連線失敗：", err))
+  .then(() => console.log("✅ 成功連線至 MongoDB Atlas"))
+  .catch((err) => console.error("❌ MongoDB 連線失敗：", err))
 
-// 使用者資料結構
+/* ------------------ 👤 使用者資料結構 ------------------ */
 const userSchema = new mongoose.Schema({
   account: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -30,7 +44,7 @@ const userSchema = new mongoose.Schema({
 
 const User = mongoose.model("User", userSchema, "logins")
 
-/* ------------------ 🪶 Discord Webhook 通知函式 ------------------ */
+/* ------------------ 🪶 Discord Webhook 通知 ------------------ */
 async function sendDiscordMessage(action, payload) {
   if (!DISCORD_WEBHOOK_URL) {
     console.warn("⚠️ 未設定 Discord Webhook URL，略過通知")
@@ -38,7 +52,7 @@ async function sendDiscordMessage(action, payload) {
   }
 
   try {
-    const title = action === "borrow" ? "槍枝借出紀錄" : " 槍枝歸還紀錄"
+    const title = action === "borrow" ? "🔫 槍枝借出紀錄" : "♻️ 槍枝歸還紀錄"
     const color = action === "borrow" ? 0xfbbf24 : 0x22c55e
 
     const body = {
@@ -52,7 +66,7 @@ async function sendDiscordMessage(action, payload) {
             { name: "槍枝", value: payload.gunName || "未知", inline: true },
             { name: "時間", value: payload.time || new Date().toLocaleString("zh-TW"), inline: false }
           ],
-          footer: { text: " 槍枝借還系統自動通知" },
+          footer: { text: "槍枝借還系統自動通知" },
           timestamp: new Date().toISOString()
         }
       ]
@@ -73,9 +87,9 @@ async function sendDiscordMessage(action, payload) {
   }
 }
 
-/* ------------------ API 區塊 ------------------ */
+/* ------------------ 📡 API 區塊 ------------------ */
 
-// 取得所有紀錄
+// 槍枝紀錄
 app.get("/api/guns", async (req, res) => {
   try {
     const guns = await Gun.find().sort({ borrowTime: -1 })
@@ -101,7 +115,6 @@ app.post("/api/borrow", async (req, res) => {
       borrowTime: new Date(),
     })
 
-    // 發送 Discord 通知
     sendDiscordMessage("borrow", {
       guildName,
       memberName,
@@ -126,7 +139,6 @@ app.post("/api/return/:id", async (req, res) => {
     record.returnTime = new Date()
     await record.save()
 
-    // 發送 Discord 通知
     sendDiscordMessage("return", {
       guildName: record.guildName,
       memberName: record.memberName,
@@ -141,21 +153,20 @@ app.post("/api/return/:id", async (req, res) => {
   }
 })
 
-// 使用者註冊
+/* ------------------ 👤 使用者帳號 ------------------ */
+
+// 註冊
 app.post("/api/register", async (req, res) => {
   try {
     const { account, password, name } = req.body
-    if (!account || !password || !name) {
+    if (!account || !password || !name)
       return res.status(400).json({ success: false, message: "缺少必要欄位" })
-    }
 
     const exists = await User.findOne({ account })
-    if (exists) {
+    if (exists)
       return res.status(409).json({ success: false, message: "此帳號已存在" })
-    }
 
     const newUser = await User.create({ account, password, name })
-
     const userSafe = {
       _id: newUser._id,
       account: newUser.account,
@@ -171,18 +182,16 @@ app.post("/api/register", async (req, res) => {
   }
 })
 
-// 登入
-app.post("/api/login", async (req, res) => {
+// 登入 (防暴力登入)
+app.post("/api/login", loginLimiter, async (req, res) => {
   try {
     const { account, password } = req.body
-    if (!account || !password) {
+    if (!account || !password)
       return res.status(400).json({ success: false, message: "缺少帳號或密碼" })
-    }
 
     const user = await User.findOne({ account, password })
-    if (!user) {
+    if (!user)
       return res.status(401).json({ success: false, message: "帳號或密碼錯誤" })
-    }
 
     const userSafe = {
       _id: user._id,
@@ -199,5 +208,5 @@ app.post("/api/login", async (req, res) => {
   }
 })
 
-/* ------------------ 啟動伺服器 ------------------ */
-app.listen(PORT, () => console.log(` Server running on port ${PORT}`))
+/* ------------------ 🚀 啟動伺服器 ------------------ */
+app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`))
