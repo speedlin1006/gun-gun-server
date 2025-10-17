@@ -71,6 +71,12 @@ async function sendDiscordMessage(action, payload) {
     const title = action === "borrow" ? "🔫 槍枝借出紀錄" : "♻️ 槍枝歸還紀錄"
     const color = action === "borrow" ? 0xfbbf24 : 0x22c55e
 
+    // ✅ 在這裡宣告台灣時區時間
+    const taiwanTime = new Date().toLocaleString("zh-TW", {
+      timeZone: "Asia/Taipei",
+      hour12: false
+    })
+
     const body = {
       embeds: [
         {
@@ -80,7 +86,7 @@ async function sendDiscordMessage(action, payload) {
             { name: "幫會", value: payload.guildName || "未知", inline: true },
             { name: "成員", value: payload.memberName || "未知", inline: true },
             { name: "槍枝", value: payload.gunName || "未知", inline: true },
-            { name: "時間", value: payload.time || new Date().toLocaleString("zh-TW"), inline: false }
+            { name: "時間", value: taiwanTime, inline: false } // ✅ 這裡就能用了
           ],
           footer: { text: "槍枝借還系統自動通知" },
           timestamp: new Date().toISOString()
@@ -97,11 +103,14 @@ async function sendDiscordMessage(action, payload) {
     if (!res.ok) {
       const errTxt = await res.text()
       console.error("Discord webhook 發送失敗：", errTxt)
+    } else {
+      console.log("✅ 已發送 Discord 通知")
     }
   } catch (err) {
-    console.error("無法發送 Discord 通知：", err)
+    console.error("❌ 無法發送 Discord 通知：", err)
   }
 }
+
 
 /* ------------------ 📡 API 區塊 ------------------ */
 
