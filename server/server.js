@@ -300,25 +300,28 @@ app.post("/api/announcement", verifyToken, requireRole("leader", "officer"), asy
 })
 
 
-// 取得所有登入 IP 紀錄（最新一筆在最前）
+// 取得所有登入 IP 紀錄（由新到舊排序）
 app.get("/api/login-ip", async (req, res) => {
   try {
-    const records = await LoginIP.find().sort({ loginTime: -1 }).limit(1)
+    const records = await LoginIP.find().sort({ loginTime: -1 }) // 拿掉 .limit(1)
     res.json(records)
   } catch (err) {
+    console.error("❌ 取得登入 IP 錯誤：", err)
     res.status(500).json({ error: "無法取得 IP 紀錄" })
   }
 })
 
-// 取得所有登入位置紀錄（最新一筆在最前）
+// 取得所有登入位置紀錄（由新到舊排序）
 app.get("/api/login-location", async (req, res) => {
   try {
-    const records = await LoginLocation.find().sort({ recordTime: -1 }).limit(1)
+    const records = await LoginLocation.find().sort({ recordTime: -1 }) // 拿掉 .limit(1)
     res.json(records)
   } catch (err) {
+    console.error("❌ 取得登入位置錯誤：", err)
     res.status(500).json({ error: "無法取得位置紀錄" })
   }
 })
+
 
 
 /* ------------------ 🚀 啟動伺服器 ------------------ */
