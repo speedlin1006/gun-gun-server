@@ -254,6 +254,7 @@ app.post("/api/login", loginLimiter, async (req, res) => {
   }
 })
 
+
 /* ------------------ 📍 登入後上傳位置 ------------------ */
 app.post("/api/location", async (req, res) => {
   try {
@@ -266,14 +267,12 @@ app.post("/api/location", async (req, res) => {
     if (isNaN(lat) || isNaN(lon))
       return res.status(400).json({ success: false, message: "座標格式錯誤" })
 
-    // 從使用者資料表找出名稱
     const user = await User.findOne({ account })
     const name = user ? user.name : "未知使用者"
 
-    // 一起儲存名稱進登入位置紀錄
     await LoginLocation.create({
       account,
-      name,          // 新增：存入名稱
+      name,
       latitude: lat,
       longitude: lon,
       recordTime: new Date()
@@ -285,6 +284,7 @@ app.post("/api/location", async (req, res) => {
     res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
+
 
 
 /* ------------------ 📢 公告 API ------------------ */

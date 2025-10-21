@@ -4,6 +4,7 @@ const loginLocationSchema = new mongoose.Schema({
   account: String,
   latitude: Number,
   longitude: Number,
+  name: String,
   recordTime: { type: Date, default: Date.now }
 })
 
