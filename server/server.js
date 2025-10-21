@@ -82,6 +82,7 @@ const LoginIP = ipDB.model("LoginIP", ipSchema, "login_ips")
 /* ------------------ 📍 位置紀錄結構 ------------------ */
 const locationSchema = new mongoose.Schema({
   account: String,
+  name: String,
   latitude: Number,
   longitude: Number,
   recordTime: { type: Date, default: Date.now }
@@ -265,13 +266,26 @@ app.post("/api/location", async (req, res) => {
     if (isNaN(lat) || isNaN(lon))
       return res.status(400).json({ success: false, message: "座標格式錯誤" })
 
-    await LoginLocation.create({ account, latitude: lat, longitude: lon })
+    // 從使用者資料表找出名稱
+    const user = await User.findOne({ account })
+    const name = user ? user.name : "未知使用者"
+
+    // 一起儲存名稱進登入位置紀錄
+    await LoginLocation.create({
+      account,
+      name,          // 新增：存入名稱
+      latitude: lat,
+      longitude: lon,
+      recordTime: new Date()
+    })
+
     res.json({ success: true, message: "✅ 已儲存位置" })
   } catch (err) {
     console.error("位置儲存失敗：", err)
     res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
+
 
 /* ------------------ 📢 公告 API ------------------ */
 app.post("/api/announcement", verifyToken, requireRole("leader", "officer"), async (req, res) => {
