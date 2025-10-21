@@ -8,5 +8,5 @@ dist/
 
 
 # git add .
-# git commit -m "添加幫會名稱 更改資料庫 右上角登入名稱更改" 
+# git commit -m "新增抓位置及IP" 
 # git push
