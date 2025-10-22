@@ -229,11 +229,19 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     if (!user)
       return res.status(401).json({ success: false, message: "帳號或密碼錯誤" })
 
+    // 抓真實 IP（支援 Render / Proxy）
     let ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || ""
     if (ip.includes(",")) ip = ip.split(",")[0].trim()
 
-    await LoginIP.create({ account, ip })
+    // ✅ 儲存帳號 + 名稱 + IP
+    await LoginIP.create({
+      account,
+      name: user.name,   
+      ip,
+      loginTime: new Date()
+    })
 
+    // 建立 JWT token
     const token = jwt.sign(
       { id: user._id, name: user.name, guild: user.guild, role: user.role },
       JWT_SECRET,
@@ -333,6 +341,73 @@ app.get("/api/login-location", async (req, res) => {
   } catch (err) {
     console.error("❌ 取得登入位置錯誤：", err)
     res.status(500).json({ error: "無法取得位置紀錄" })
+  }
+})
+
+/* ------------------ 👑 使用者管理（管理員專用） ------------------ */
+
+// 取得所有使用者
+app.get("/api/users", async (req, res) => {
+  try {
+    const users = await User.find({}, "account name guild role").sort({ createdAt: -1 })
+    res.json(users)
+  } catch (err) {
+    console.error("❌ 無法取得使用者資料：", err)
+    res.status(500).json({ success: false, message: "伺服器錯誤" })
+  }
+})
+
+// 更新使用者（名稱 / 幫會）
+app.put("/api/users/:id", async (req, res) => {
+  try {
+    const { name, guild } = req.body
+    await User.findByIdAndUpdate(req.params.id, { name, guild })
+    res.json({ success: true, message: "更新成功" })
+  } catch (err) {
+    console.error("❌ 更新使用者錯誤：", err)
+    res.status(500).json({ success: false, message: "更新失敗" })
+  }
+})
+
+// 刪除使用者
+app.delete("/api/users/:id", async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id)
+    res.json({ success: true, message: "已刪除使用者" })
+  } catch (err) {
+    console.error("❌ 刪除使用者錯誤：", err)
+    res.status(500).json({ success: false, message: "刪除失敗" })
+  }
+})
+
+// 新增使用者（管理員建立帳號）
+app.post("/api/users", async (req, res) => {
+  try {
+    const { account, password, name, guild, role } = req.body
+
+    if (!account || !password || !name || !guild) {
+      return res.status(400).json({ success: false, message: "缺少必要欄位" })
+    }
+
+    // 檢查是否重複帳號
+    const exists = await User.findOne({ account })
+    if (exists) {
+      return res.status(409).json({ success: false, message: "帳號已存在" })
+    }
+
+    // 建立新使用者
+    const newUser = await User.create({
+      account,
+      password,
+      name,
+      guild,
+      role: role || "member" // 預設為 member
+    })
+
+    res.json({ success: true, message: "✅ 新增成功", data: newUser })
+  } catch (err) {
+    console.error("❌ 新增使用者錯誤：", err)
+    res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
 
