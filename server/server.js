@@ -6,6 +6,8 @@ import rateLimit from "express-rate-limit"
 import jwt from "jsonwebtoken"
 import fetch from "node-fetch"
 import Gun from "./models/gunModel.js"
+import keepRecordRoutes from "./routes/keepRecordRoutes.js"
+
 
 dotenv.config()
 
@@ -411,6 +413,8 @@ app.post("/api/users", async (req, res) => {
   }
 })
 
+/* ------------------ 🔒 留一冷卻管理 API ------------------ */
+app.use("/api/gun-keep", keepRecordRoutes)
 
 
 /* ------------------ 🚀 啟動伺服器 ------------------ */
