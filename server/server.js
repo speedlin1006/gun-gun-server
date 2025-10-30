@@ -21,7 +21,7 @@ app.set("trust proxy", 1)
 /* ------------------ 🌐 CORS 設定 ------------------ */
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://gun-guild.netlify.app"
+  "https://gun-guild-gun.netlify.app"
 ]
 app.use(
   cors({
