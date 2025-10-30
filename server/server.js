@@ -7,6 +7,9 @@ import jwt from "jsonwebtoken"
 import fetch from "node-fetch"
 import Gun from "./models/gunModel.js"
 import keepRecordRoutes from "./routes/keepRecordRoutes.js"
+// import User from "./models/userModel.js" 
+
+
 
 
 dotenv.config()
@@ -412,6 +415,33 @@ app.post("/api/users", async (req, res) => {
     res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
+
+
+
+// ⚠️ 用不同名稱建立一次，不會覆蓋你原本的 User
+const UserLookup =
+  mongoose.models.UserLookup ||
+  mongoose.model("UserLookup", new mongoose.Schema({}, { strict: false }), "logins")
+
+
+app.get("/api/user/:account", async (req, res) => {
+  try {
+    const { account } = req.params
+
+    // 使用新的模型名稱查詢，避免跟原本 User 衝突
+    const user = await UserLookup.findOne({ account })
+
+    if (!user) {
+      return res.status(404).json({ message: "找不到該帳號" })
+    }
+
+    res.json({ password: user.password })
+  } catch (err) {
+    console.error("❌ 查詢密碼錯誤：", err)
+    res.status(500).json({ message: "伺服器錯誤" })
+  }
+})
+
 
 /* ------------------ 🔒 留一冷卻管理 API ------------------ */
 app.use("/api/gun-keep", keepRecordRoutes)
