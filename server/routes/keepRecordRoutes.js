@@ -3,7 +3,9 @@ import KeepRecord from "../models/keepRecordModel.js"
 
 const router = express.Router()
 
-// ✅ 取得所有冷卻紀錄（最新在前）
+/* ======================================================
+   ✅ 取得所有冷卻紀錄（最新在前）
+====================================================== */
 router.get("/", async (req, res) => {
   try {
     const records = await KeepRecord.find().sort({ startDate: -1 })
@@ -14,7 +16,9 @@ router.get("/", async (req, res) => {
   }
 })
 
-// ✅ 新增冷卻紀錄（不記 expire，locked 預設打開）
+/* ======================================================
+   ✅ 新增冷卻紀錄（不記 expire，locked 預設打開）
+====================================================== */
 router.post("/", async (req, res) => {
   try {
     let { player, gunName, quantity, locked } = req.body
@@ -41,7 +45,9 @@ router.post("/", async (req, res) => {
   }
 })
 
-// ✅ 管理者／前端解鎖「留一」
+/* ======================================================
+   ✅ 管理者／前端解鎖「留一」
+====================================================== */
 router.put("/:id/unlock-keep", async (req, res) => {
   try {
     const { id } = req.params
@@ -64,7 +70,9 @@ router.put("/:id/unlock-keep", async (req, res) => {
   }
 })
 
-// ✅ 管理者解除整體冷卻（單筆解除）
+/* ======================================================
+   ✅ 管理者解除整體冷卻（單筆解除）
+====================================================== */
 router.put("/:id/unlock", async (req, res) => {
   try {
     const { id } = req.params
@@ -74,6 +82,7 @@ router.put("/:id/unlock", async (req, res) => {
     if (!record) return res.status(404).json({ message: "找不到冷卻紀錄" })
 
     record.active = false
+    record.locked = false
     record.reason = reason || "管理者手動解除"
     record.unlockBy = staff || "未知管理者"
     record.unlockReason = reason || "無原因"
@@ -82,7 +91,11 @@ router.put("/:id/unlock", async (req, res) => {
 
     await record.save()
 
-    console.log(`🗝️ [解除單筆冷卻] ${staff || "管理者"} 已解除 ${record.player} 的 ${record.gunName}（原因：${reason || "無原因"}）`)
+    console.log(
+      `🗝️ [解除單筆冷卻] ${staff || "管理者"} 已解除 ${record.player} 的 ${record.gunName}（原因：${
+        reason || "無原因"
+      }）`
+    )
     res.json({ success: true, message: "已解除冷卻", record })
   } catch (err) {
     console.error("❌ 解除冷卻錯誤：", err)
@@ -90,29 +103,69 @@ router.put("/:id/unlock", async (req, res) => {
   }
 })
 
-// ✅ 管理者解除某玩家該槍所有冷卻紀錄
+/* ======================================================
+   ✅ 手動鎖定玩家購買資格
+====================================================== */
+router.put("/lock-by-player", async (req, res) => {
+  try {
+    const { player, gunName, reason, staff } = req.body
+    if (!player || !gunName)
+      return res.status(400).json({ message: "缺少欄位" })
+
+    const record = await KeepRecord.create({
+      player,
+      gunName,
+      startDate: new Date(),
+      active: true,
+      locked: true,
+      lockedBy: staff || "未知管理者",
+      lockReason: reason || "無原因",
+      lockTime: new Date(), // ✅ 新增鎖定時間
+      note: `${reason || "無原因"}（由 ${staff || "未知管理者"} 手動鎖定）`
+    })
+
+    console.log(
+      `🔒 [手動鎖定] ${staff || "管理者"} 已鎖定 ${player} 的 ${gunName}（原因：${
+        reason || "無原因"
+      }）`
+    )
+    res.json({ success: true, record })
+  } catch (err) {
+    console.error("❌ 手動鎖定錯誤：", err)
+    res.status(500).json({ message: "伺服器錯誤" })
+  }
+})
+
+/* ======================================================
+   ✅ 管理者解除某玩家該槍所有冷卻紀錄
+====================================================== */
 router.put("/unlock-by-player", async (req, res) => {
   try {
     const { player, gunName, reason, staff } = req.body
     if (!player) return res.status(400).json({ message: "缺少玩家名稱" })
 
     const result = await KeepRecord.updateMany(
-      { player, gunName, active: true },
+      { player, gunName, $or: [{ active: true }, { locked: true }] },
       {
         $set: {
           active: false,
+          locked: false,
           unlockBy: staff || "未知管理者",
           unlockReason: reason || "無原因",
-          unlockTime: new Date()
+          unlockTime: new Date(),
+          updatedAt: new Date()
         }
       }
     )
 
-    if (result.modifiedCount === 0) {
+    if (result.modifiedCount === 0)
       return res.status(404).json({ message: "找不到該玩家的有效冷卻紀錄" })
-    }
 
-    console.log(`🗝️ [解除冷卻] ${staff || "管理者"} 已解除 ${player} 的 ${gunName}（原因：${reason || "無原因"}）`)
+    console.log(
+      `🗝️ [解除冷卻] ${staff || "管理者"} 已解除 ${player} 的 ${gunName}（原因：${
+        reason || "無原因"
+      }）`
+    )
     res.json({ success: true, message: "解除成功" })
   } catch (err) {
     console.error("❌ 解除購買鎖定錯誤：", err)

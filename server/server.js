@@ -7,6 +7,8 @@ import jwt from "jsonwebtoken"
 import fetch from "node-fetch"
 import Gun from "./models/gunModel.js"
 import keepRecordRoutes from "./routes/keepRecordRoutes.js"
+import configRoute from "./routes/configRoute.js"
+
 // import User from "./models/userModel.js" 
 
 
@@ -445,6 +447,8 @@ app.get("/api/user/:account", async (req, res) => {
 
 /* ------------------ 🔒 留一冷卻管理 API ------------------ */
 app.use("/api/gun-keep", keepRecordRoutes)
+app.use("/api/config", configRoute)
+
 
 
 /* ------------------ 🚀 啟動伺服器 ------------------ */
