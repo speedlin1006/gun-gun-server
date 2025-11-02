@@ -8,6 +8,8 @@ import fetch from "node-fetch"
 import Gun from "./models/gunModel.js"
 import keepRecordRoutes from "./routes/keepRecordRoutes.js"
 import configRoute from "./routes/configRoute.js"
+import authRoutes from "./routes/auth.js"
+
 
 // import User from "./models/userModel.js" 
 
@@ -39,6 +41,8 @@ app.use(
   })
 )
 app.use(express.json())
+
+
 
 /* ------------------ 🧱 防暴力登入 ------------------ */
 const loginLimiter = rateLimit({
@@ -370,17 +374,24 @@ app.get("/api/users", async (req, res) => {
   }
 })
 
-// 更新使用者（名稱 / 幫會）
+// ✅ 更新使用者（名稱 / 幫會 / 階級）
 app.put("/api/users/:id", async (req, res) => {
   try {
-    const { name, guild } = req.body
-    await User.findByIdAndUpdate(req.params.id, { name, guild })
+    const { name, guild, role } = req.body
+
+    await User.findByIdAndUpdate(req.params.id, {
+      name,
+      guild,
+      role  // ✅ 新增這一欄
+    })
+
     res.json({ success: true, message: "更新成功" })
   } catch (err) {
     console.error("❌ 更新使用者錯誤：", err)
     res.status(500).json({ success: false, message: "更新失敗" })
   }
 })
+
 
 // 刪除使用者
 app.delete("/api/users/:id", async (req, res) => {
@@ -454,6 +465,8 @@ app.get("/api/user/:account", async (req, res) => {
 /* ------------------ 🔒 留一冷卻管理 API ------------------ */
 app.use("/api/gun-keep", keepRecordRoutes)
 app.use("/api/config", configRoute)
+app.use("/api/auth", authRoutes)
+
 
 
 

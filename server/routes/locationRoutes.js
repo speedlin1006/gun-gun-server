@@ -3,7 +3,7 @@ import Location from "../models/locationModel.js"
 
 const router = express.Router()
 
-// ✅ 新增登入位置紀錄
+//  新增登入位置紀錄
 router.post("/", async (req, res) => {
   try {
     const { account, name, latitude, longitude } = req.body
