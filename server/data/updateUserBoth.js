@@ -14,15 +14,15 @@ console.log("👉 MONGODB_URI:", process.env.MONGODB_URI)
 
 // ==================== 資料庫重點 
 // 原名稱
-const OLD_NAME = "阿極"
+const OLD_NAME = "問號的巨蟹"
 //要改的樣子 建議不改的也打上來 真的不知道可以找user.json或是不打
 const NEW_DATA =   
   {
-    "account": "10060106",
-    "password": "10060106",
-    "name": "阿極",
-    "guild": "1",
-    "role": "leader"
+    "account": "C168505859",
+    "password": "DokiDoki~5819",
+    "name": "問號的巨蟹",
+    "guild": "13",
+    "role": "member"
   }
 // ===================
 
