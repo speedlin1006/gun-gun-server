@@ -9,6 +9,7 @@ import Gun from "./models/gunModel.js"
 import keepRecordRoutes from "./routes/keepRecordRoutes.js"
 import configRoute from "./routes/configRoute.js"
 import authRoutes from "./routes/auth.js"
+import accountRoutes from "./routes/accountRoutes.mjs"
 
 
 // import User from "./models/userModel.js" 
@@ -41,6 +42,7 @@ app.use(
   })
 )
 app.use(express.json())
+app.use(express.urlencoded({ extended: true }))  // ← 加這一行！
 
 
 
@@ -244,34 +246,46 @@ app.post("/api/login", loginLimiter, async (req, res) => {
     let ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress || ""
     if (ip.includes(",")) ip = ip.split(",")[0].trim()
 
-    // ✅ 儲存帳號 + 名稱 + IP
+    // ✅ 儲存登入紀錄（IP）
     await LoginIP.create({
-      account,
-      name: user.name,   
+      account: user.account,
+      name: user.name,
       ip,
       loginTime: new Date()
     })
 
-    // 建立 JWT token
+    // ✅ 建立 JWT，加入 account
     const token = jwt.sign(
-      { id: user._id, name: user.name, guild: user.guild, role: user.role },
+      {
+        id: user._id,
+        account: user.account, // 加這行讓前端能辨識帳號
+        name: user.name,
+        guild: user.guild,
+        role: user.role
+      },
       JWT_SECRET,
       { expiresIn: "3h" }
     )
 
+    // ✅ 回傳 user 時一併附上 account
     res.json({
       success: true,
       message: "登入成功",
       token,
       ip,
-      user: { name: user.name, guild: user.guild, role: user.role },
-      account
+      user: {
+        account: user.account, // ✅ 關鍵！
+        name: user.name,
+        guild: user.guild,
+        role: user.role
+      }
     })
   } catch (err) {
     console.error("登入失敗：", err)
     res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
+
 
 
 /* ------------------ 📍 登入後上傳位置 ------------------ */
@@ -462,10 +476,11 @@ app.get("/api/user/:account", async (req, res) => {
 })
 
 
-/* ------------------ 🔒 留一冷卻管理 API ------------------ */
+/* ------------------ 管理 API ------------------ */
 app.use("/api/gun-keep", keepRecordRoutes)
 app.use("/api/config", configRoute)
 app.use("/api/auth", authRoutes)
+app.use("/api/account", accountRoutes)
 
 
 
