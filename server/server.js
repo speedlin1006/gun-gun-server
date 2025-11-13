@@ -10,6 +10,8 @@ import keepRecordRoutes from "./routes/keepRecordRoutes.js"
 import configRoute from "./routes/configRoute.js"
 import authRoutes from "./routes/auth.js"
 import accountRoutes from "./routes/accountRoutes.mjs"
+import leaveRoutes from "./routes/leaveRoutes.js"
+import locationRoutes from './routes/locationRoutes.js'
 
 
 // import User from "./models/userModel.js" 
@@ -38,7 +40,8 @@ app.use(
       else callback(new Error("CORS 不允許的來源：" + origin))
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+   
+    allowedHeaders: ["Content-Type", "Authorization", "X-Loc-Ticket"]
   })
 )
 app.use(express.json())
@@ -288,7 +291,8 @@ app.post("/api/login", loginLimiter, async (req, res) => {
 
 
 
-/* ------------------ 📍 登入後上傳位置 ------------------ */
+
+
 /* ------------------ 📍 登入後上傳位置 ------------------ */
 app.post("/api/location", async (req, res) => {
   try {
@@ -481,6 +485,9 @@ app.use("/api/gun-keep", keepRecordRoutes)
 app.use("/api/config", configRoute)
 app.use("/api/auth", authRoutes)
 app.use("/api/account", accountRoutes)
+app.use("/api/leave", leaveRoutes)
+app.use('/api/location', locationRoutes)
+
 
 
 

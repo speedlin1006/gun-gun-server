@@ -1,61 +1,46 @@
+// routes/locationRoutes.js
 import express from "express"
 import Location from "../models/locationModel.js"
 
 const router = express.Router()
 
-// 🧩 免定位名單（僅後端知道）
-const skipGPSList = ["阿極", "阿峰"]
+// ✅ 白名單（不用定位）
+const skipGPSList = ["阿極", "阿峰", "純測試帳號 不要刪"]
 
 /* ======================================================
-   ✅ 判斷是否需要定位
-   前端登入後會先呼叫這支 API，由後端決定是否略過定位
+   📍 判斷是否需要定位
    ====================================================== */
 router.post("/shouldLocate", (req, res) => {
-  try {
-    const { name } = req.body
-    if (!name) return res.status(400).json({ message: "缺少名稱" })
+  const { name } = req.body
+  if (!name) return res.status(400).json({ message: "缺少名稱" })
 
-    const needLocate = !skipGPSList.includes(name)
-    res.json({ needLocate })
-  } catch (err) {
-    console.error("❌ 定位判斷錯誤：", err)
-    res.status(500).json({ message: "伺服器錯誤" })
-  }
+  const needLocate = !skipGPSList.includes(name)
+  res.json({ needLocate })
 })
 
 /* ======================================================
-   ✅ 新增登入位置紀錄
+   ✅ 新增定位紀錄（只存名稱 + 經緯度 + 時間）
    ====================================================== */
 router.post("/", async (req, res) => {
   try {
-    const { account, name, latitude, longitude } = req.body
-    if (!account || !latitude || !longitude)
-      return res.status(400).json({ message: "缺少欄位" })
+    const { name, latitude, longitude } = req.body
 
+    if (!name) {
+      return res.status(400).json({ success: false, message: "缺少名稱" })
+    }
+
+    // 若未開啟定位，就不要擋，緯經度給 null
     const record = await Location.create({
-      account,
       name,
-      latitude,
-      longitude,
-      createdAt: new Date()
+      latitude: latitude || null,
+      longitude: longitude || null,
+      recordTime: new Date()
     })
+
     res.json({ success: true, record })
   } catch (err) {
     console.error("❌ 新增位置紀錄錯誤：", err)
-    res.status(500).json({ message: "伺服器錯誤" })
-  }
-})
-
-/* ======================================================
-   取得所有登入紀錄（選擇性）
-   ====================================================== */
-router.get("/", async (req, res) => {
-  try {
-    const records = await Location.find().sort({ createdAt: -1 })
-    res.json(records)
-  } catch (err) {
-    console.error("❌ 取得登入位置紀錄錯誤：", err)
-    res.status(500).json({ message: "伺服器錯誤" })
+    res.status(500).json({ success: false, message: "伺服器錯誤" })
   }
 })
 
