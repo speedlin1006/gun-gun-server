@@ -15,6 +15,7 @@ import leaveRoutes from "./routes/leaveRoutes.js"
 import locationRoutes from './routes/locationRoutes.js'
 import uploadRoute from "./routes/uploadRoute.js"
 import analyzeRoute from "./routes/analyzeRoute.js"
+import killRecordRoute from "./routes/killRecordRoute.js"
 
 
 
@@ -500,6 +501,7 @@ app.use("/api/leave", leaveRoutes)
 app.use('/api/location', locationRoutes)
 app.use("/api", uploadRoute)
 app.use("/api", analyzeRoute)
+app.use("/api", killRecordRoute)
 
 
 

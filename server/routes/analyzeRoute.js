@@ -21,10 +21,20 @@ const client = new ImageAnnotatorClient({
 });
 
 /* ===============================
-    🧹 去除括號 (#557)
+    🔍 名稱乾淨化（超強模糊）
 ================================*/
 function cleanName(name) {
-  return name.replace(/\(.*?\)/g, ""); // 去掉 (xxx)
+  if (!name) return "";
+  return name
+    .replace(/（.*?）/g, "")        // 中文括號
+    .replace(/\(.*?\)/g, "")        // 英文括號
+    .replace(/#\d+/g, "")           // #557 ID
+    .replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "") // 符號移除
+    .trim();
+}
+
+function isSamePlayer(a, b) {
+  return cleanName(a) !== "" && cleanName(b) !== "" && cleanName(a) === cleanName(b);
 }
 
 /* ===============================
@@ -40,9 +50,9 @@ const GUN_LIST = [
 ];
 
 /* ===============================
-    💰 金額設定
+    💰 計算設定
 ================================*/
-const PRICE_KILL = 100000;   // 10W
+const PRICE_KILL = 100000;
 const PRICE_DEATH = 0;
 const PRICE_MISTAKE = 0;
 
@@ -63,7 +73,7 @@ router.post("/analyze", async (req, res) => {
     }
 
     /* ===============================
-        ⭐ 下載 Cloudinary 圖片
+        ⭐ 下載圖片
     =================================*/
     const downloadUrl = imageUrl.replace(".webp", ".png");
     const imgRes = await fetch(downloadUrl);
@@ -72,11 +82,11 @@ router.post("/analyze", async (req, res) => {
       return res.status(400).json({ error: "無法下載圖片" });
     }
 
-    const arrayBuffer = await imgRes.arrayBuffer();
-    const base64Image = Buffer.from(arrayBuffer).toString("base64");
+    const buffer = await imgRes.arrayBuffer();
+    const base64Image = Buffer.from(buffer).toString("base64");
 
     /* ===============================
-        ⭐ OCR 辨識
+        ⭐ OCR
     =================================*/
     const [result] = await client.textDetection({
       image: { content: base64Image }
@@ -86,50 +96,56 @@ router.post("/analyze", async (req, res) => {
     console.log("🔍 OCR Raw:\n", raw);
 
     /* ===============================
-        🔍 分析擊殺紀錄
+        🔍 抓全部玩家 → 用來判斷友軍
+    =================================*/
+    const allUsers = await User.find({}, "name");
+
+    /* ===============================
+        🔍 分析擊殺紀錄（模糊名稱）
     =================================*/
     const lines = raw.split("\n").filter(
       (l) => l.includes("擊殺") && l.includes("使用")
     );
 
     let kills = 0, deaths = 0, mistakes = 0;
+    const uploaderClean = cleanName(uploaderName);
 
     for (let line of lines) {
-      const clean = line.replace(/\s/g, ""); // 去空白
+      const noSpace = line.replace(/\s/g, "");
 
-      let gunHit = GUN_LIST.find(g => clean.includes(g));
+      // 是否包含槍枝
+      let gunHit = GUN_LIST.find(g => noSpace.includes(g));
       if (!gunHit) continue;
 
-      const useIndex = clean.indexOf("使用");
-      const killIndex = clean.indexOf("擊殺");
+      const useIndex = noSpace.indexOf("使用");
+      const killIndex = noSpace.indexOf("擊殺");
+      if (useIndex === -1 || killIndex === -1) continue;
 
-      const attacker = clean.substring(0, useIndex);
-      const victim = clean.substring(killIndex + 2);
+      const attacker = cleanName(noSpace.substring(0, useIndex));
+      const victim = cleanName(noSpace.substring(killIndex + 2));
 
-      const attackerName = cleanName(attacker);
-      const victimName = cleanName(victim);
-      const uploaderClean = cleanName(uploaderName);
+      const attackerIsUploader = isSamePlayer(attacker, uploaderClean);
+      const victimIsUploader = isSamePlayer(victim, uploaderClean);
 
-      const attackerIsUploader = attackerName === uploaderClean;
-      const victimIsUploader = victimName === uploaderClean;
-
-      // 都不是本人 → 跳過
       if (!attackerIsUploader && !victimIsUploader) continue;
 
-      // 檢查是否誤殺友軍
-      const victimInfo = await User.findOne({ name: victimName });
-      const victimIsFriendly = !!victimInfo;
+      // 判斷友軍（模糊）
+      const victimIsFriendly = allUsers.some(u =>
+        isSamePlayer(u.name, victim)
+      );
 
       if (attackerIsUploader) {
         if (victimIsFriendly) mistakes++;
         else kills++;
       }
 
-      if (victimIsUploader) deaths++;
+      if (victimIsUploader) {
+        deaths++;
+      }
     }
 
     /* ===============================
-        💰 金額運算
+        💰 金額
     =================================*/
     const totalMoney =
       kills * PRICE_KILL +
@@ -152,7 +168,7 @@ router.post("/analyze", async (req, res) => {
     });
 
     /* ===============================
-        ⭐ 回傳結果
+        ⭐ 回傳
     =================================*/
     return res.json({
       success: true,
