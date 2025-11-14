@@ -1,7 +1,8 @@
 import express from "express"
 import mongoose from "mongoose"
 import cors from "cors"
-import dotenv from "dotenv"
+// import dotenv from "dotenv"
+import * as dotenv from "dotenv";
 import rateLimit from "express-rate-limit"
 import jwt from "jsonwebtoken"
 import fetch from "node-fetch"
@@ -12,6 +13,11 @@ import authRoutes from "./routes/auth.js"
 import accountRoutes from "./routes/accountRoutes.mjs"
 import leaveRoutes from "./routes/leaveRoutes.js"
 import locationRoutes from './routes/locationRoutes.js'
+import uploadRoute from "./routes/uploadRoute.js"
+import analyzeRoute from "./routes/analyzeRoute.js"
+
+
+
 
 
 // import User from "./models/userModel.js" 
@@ -20,6 +26,8 @@ import locationRoutes from './routes/locationRoutes.js'
 
 
 dotenv.config()
+// console.log("CLOUDINARY_API_KEY =", process.env.CLOUDINARY_API_KEY);
+
 
 const app = express()
 const PORT = process.env.PORT || 3000
@@ -44,8 +52,10 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization", "X-Loc-Ticket"]
   })
 )
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))  // ← 加這一行！
+// 允許最大 20MB（你可以調整）
+app.use(express.json({ limit: "20mb" }))
+app.use(express.urlencoded({ limit: "20mb", extended: true }))
+
 
 
 
@@ -86,6 +96,7 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 )
 const User = mongoose.model("User", userSchema, "logins")
+
 
 /* ------------------ 🧾 IP 登入紀錄結構 ------------------ */
 const ipSchema = new mongoose.Schema({
@@ -487,6 +498,10 @@ app.use("/api/auth", authRoutes)
 app.use("/api/account", accountRoutes)
 app.use("/api/leave", leaveRoutes)
 app.use('/api/location', locationRoutes)
+app.use("/api", uploadRoute)
+app.use("/api", analyzeRoute)
+
+
 
 
 
@@ -494,3 +509,6 @@ app.use('/api/location', locationRoutes)
 
 /* ------------------ 🚀 啟動伺服器 ------------------ */
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`))
+
+
+export { User };
