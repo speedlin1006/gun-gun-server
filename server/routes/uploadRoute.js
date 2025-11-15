@@ -10,23 +10,31 @@ router.post("/upload", upload.single("image"), async (req, res) => {
   try {
     const filePath = req.file.path;
 
-    // ⭐ 強制 PNG、禁止壓縮、禁止自動格式
+    // ⭐ 依照當天日期建立資料夾：killshots/YYYY/MM
+    const now = new Date();
+    const year = now.getFullYear();                          // 2025
+    const month = String(now.getMonth() + 1).padStart(2, "0"); // 11 → 01~12
+
+    const folderPath = `killshots/${year}/${month}`;
+
+    // ⭐ 上傳到 Cloudinary
     const result = await cloudinary.uploader.upload(filePath, {
-      folder: "killshots",
+      folder: folderPath,
       resource_type: "image",
-      format: "png",                              // 強制輸出 PNG
+      format: "png",
       transformation: [
-        { fetch_format: "png", quality: "100" }  // 不壓縮 + 不自動格式
+        { fetch_format: "png", quality: "100" }
       ],
-      flags: "force_strip"                        // 移除多餘的 metadata
+      flags: "force_strip"
     });
 
-    // 刪除本地檔案
+    // ⭐ 刪除本地暫存檔
     fs.unlinkSync(filePath);
 
     res.json({
       success: true,
-      url: result.secure_url
+      url: result.secure_url,
+      folder: folderPath
     });
 
   } catch (err) {

@@ -11,7 +11,7 @@ const router = express.Router();
 
 /* ===============================
     🔑 Google Vision 初始化
-================================*/
+================================ */
 const client = new ImageAnnotatorClient({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
@@ -22,7 +22,7 @@ const client = new ImageAnnotatorClient({
 
 /* ===============================
     🔍 移除「搶旗生存戰」亂碼尾巴
-================================*/
+================================ */
 function trimModeTag(text) {
   return text.replace(
     /[\(\[\{〈【『「][^)\]\}〉】』」]{0,20}搶旗生存戰[^)\]\}〉】』」]{0,20}[\)\]\}〉】』」]?/g,
@@ -32,7 +32,7 @@ function trimModeTag(text) {
 
 /* ===============================
     🔍 名稱乾淨化（超強模糊）
-================================*/
+================================ */
 function cleanName(name) {
   if (!name) return "";
   return name
@@ -49,29 +49,42 @@ function isSamePlayer(a, b) {
 }
 
 /* ===============================
-    🔫 武器名單（含 OCR 常見錯字）
-================================*/
+    🔫 武器名單
+================================ */
 const GUN_LIST = [
   "手槍","戰鬥手槍","重型手槍","小型衝鋒槍","削短型霰彈槍",
   "衝鋒槍","突擊步槍","卡賓步槍","射手步槍","雙管霰彈霰彈槍",
   "重型左輪手槍","突擊衝鋒槍","高階步槍","狙擊槍","煙火發射器",
   "0.5口徑手槍","戰鬥自衛衝鋒槍","衝鋒手槍","射手手槍","泵動式霰彈槍",
   "迷你衝鋒槍","古森柏衝鋒槍","衝鋒霰彈槍","射手步槍MKII","重型狙擊槍",
-
-  // MKII 系列＋OCR常見錯字
-  "戰鬥機關槍MKII",
-  "戰鬥機關槍MkII",
-  "戰鬥機關槍Mkii",
-  "戰鬥機關槍MKIl",
-  "戰鬥機關槍MkIl",
-
+  "戰鬥機關槍MKII","戰鬥機關槍MkII","戰鬥機關槍Mkii","戰鬥機關槍MKIl","戰鬥機關槍MkIl",
   "特製卡賓步槍",
   "穿甲手槍"
 ];
 
 /* ===============================
-    🧠 分析 API
-================================*/
+    🧹 全形 → 半形
+================================ */
+function toHalfWidth(str) {
+  return str.replace(/[\uff01-\uff5e]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
+  ).replace(/\u3000/g, " ");
+}
+
+/* ===============================
+    🗓 日期修正（各種怪符號 → 正常格式）
+================================ */
+function normalizeDateString(str) {
+  if (!str) return "";
+  str = toHalfWidth(str);
+  str = str.replace(/[^0-9\/: ]/g, "");
+  str = str.replace(/\/+/g, "/");
+  return str.trim();
+}
+
+/* ===============================
+    🧠 /analyze API
+================================ */
 router.post("/analyze", async (req, res) => {
   try {
     const { imageUrl, uploaderName } = req.body;
@@ -84,12 +97,9 @@ router.post("/analyze", async (req, res) => {
       return res.status(400).json({ error: "找不到成員" });
     }
 
-    /* ===============================
-        ⭐ 下載圖片
-    =================================*/
+    /* 下載圖片 */
     const downloadUrl = imageUrl.replace(".webp", ".png");
     const imgRes = await fetch(downloadUrl);
-
     if (!imgRes.ok) {
       return res.status(400).json({ error: "無法下載圖片" });
     }
@@ -97,25 +107,49 @@ router.post("/analyze", async (req, res) => {
     const buffer = await imgRes.arrayBuffer();
     const base64Image = Buffer.from(buffer).toString("base64");
 
-    /* ===============================
-        ⭐ OCR
-    =================================*/
-    const [result] = await client.textDetection({
+    /* OCR */
+    const [ocrResult] = await client.textDetection({
       image: { content: base64Image }
     });
 
-    const raw = result.fullTextAnnotation?.text || "";
+    const raw = ocrResult.fullTextAnnotation?.text || "";
     console.log("🔍 OCR Raw:\n", raw);
 
-    /* ===============================
-        🔍 抓全部玩家（判斷友軍）
-    =================================*/
+    /* ==================================
+        📅 日期行統一處理
+    ===================================*/
+    const lines = raw.split("\n");
+
+    const dateLines = lines
+      .map(l => normalizeDateString(l))
+      .filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
+
+    if (dateLines.length === 0) {
+      return res.status(400).json({
+        error: "截圖缺少時間紀錄，請重新截圖，務必包含『時間』。"
+      });
+    }
+
+    /* 今日日期（台灣） */
+    const todayTW = new Date().toLocaleDateString("zh-TW", {
+      timeZone: "Asia/Taipei"
+    });
+
+    /* 是否至少有一行是今日 */
+    const hasToday = dateLines.some(l => normalizeDateString(l).includes(todayTW));
+
+    if (!hasToday) {
+      return res.status(400).json({
+        error: "此截圖有非今日擊殺紀錄，請重新截圖，確認所有擊殺紀錄皆為本日。"
+      });
+    }
+
+    /* ==================================
+        🔪 擊殺紀錄分析
+    ===================================*/
     const allUsers = await User.find({}, "name");
 
-    /* ===============================
-        🔍 分析紀錄（強化版）
-    =================================*/
-    const lines = raw.split("\n").filter(l =>
+    const killLines = raw.split("\n").filter(l =>
       l.includes("使用") &&
       (
         l.includes("擊") ||
@@ -127,19 +161,17 @@ router.post("/analyze", async (req, res) => {
     );
 
     let kills = 0, deaths = 0, mistakes = 0;
+
     const uploaderClean = cleanName(uploaderName);
 
-    for (let line of lines) {
+    for (let line of killLines) {
       let row = line.replace(/\s/g, "");
 
-      // ⭐ 先移除最後（搶旗生存戰）亂碼括號
       row = trimModeTag(row);
 
-      // 找槍枝
       const gunHit = GUN_LIST.find(g => row.includes(g));
       if (!gunHit) continue;
 
-      // 找擊殺關鍵字
       const killIndex = Math.max(
         row.indexOf("擊殺"),
         row.indexOf("杀"),
@@ -151,11 +183,8 @@ router.post("/analyze", async (req, res) => {
       const useIndex = row.indexOf("使用");
       if (useIndex === -1 || killIndex === -1) continue;
 
-      const attackerRaw = row.substring(0, useIndex);
-      const victimRaw = row.substring(killIndex + 2);
-
-      const attacker = cleanName(attackerRaw);
-      const victim = cleanName(victimRaw);
+      const attacker = cleanName(row.substring(0, useIndex));
+      const victim = cleanName(row.substring(killIndex + 2));
 
       const attackerIsUploader = isSamePlayer(attacker, uploaderClean);
       const victimIsUploader = isSamePlayer(victim, uploaderClean);
@@ -176,36 +205,28 @@ router.post("/analyze", async (req, res) => {
       }
     }
 
-    /* ===============================
-        💰 金額
-    =================================*/
+    /* ==================================
+        💰 金額計算
+    ===================================*/
     const PRICE_KILL = 100000;
-    const PRICE_DEATH = 0;
-    const PRICE_MISTAKE = 0;
 
-    const totalMoney =
-      kills * PRICE_KILL +
-      deaths * PRICE_DEATH +
-      mistakes * PRICE_MISTAKE;
+    const totalMoney = kills * PRICE_KILL;
+    const moneyText = totalMoney >= 10000 ? `${totalMoney / 10000}W` : `${totalMoney}`;
 
-    const moneyText =
-      totalMoney >= 10000 ? `${totalMoney / 10000}W` : `${totalMoney}`;
-
-    /* ===============================
-        ⭐ 寫入資料庫
-    =================================*/
+    /* ==================================
+        🗃 寫入資料庫
+    ===================================*/
     const record = await KillRecord.create({
       uploader: uploaderName,
       guild: uploader.guild,
       kills,
       deaths,
       mistakes,
-      money: totalMoney
+      money: totalMoney,
+      imageUrl: imageUrl //圖片
     });
 
-    /* ===============================
-        ⭐ 回傳
-    =================================*/
+    /* 回傳 */
     return res.json({
       success: true,
       savedId: record._id,
@@ -219,7 +240,7 @@ router.post("/analyze", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("❌ Vision Base64 OCR 錯誤：", err);
+    console.error("❌ Vision OCR 錯誤：", err);
     return res.status(500).json({
       error: "Vision API 分析失敗",
       detail: err.message,
