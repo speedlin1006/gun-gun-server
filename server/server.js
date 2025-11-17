@@ -16,6 +16,9 @@ import locationRoutes from './routes/locationRoutes.js'
 import uploadRoute from "./routes/uploadRoute.js"
 import analyzeRoute from "./routes/analyzeRoute.js"
 import killRecordRoute from "./routes/killRecordRoute.js"
+import poolRoutes from "./routes/pool.js"
+import Pool from "./models/Pool.js"
+
 
 
 
@@ -491,6 +494,53 @@ app.get("/api/user/:account", async (req, res) => {
   }
 })
 
+/* ================================
+   🎰 每月 1 號 00:10 自動抽獎
+================================ */
+import cron from "node-cron";
+
+cron.schedule("10 0 1 * *", async () => {
+  console.log("⏰ 每月自動抽獎程式啟動");
+
+  const now = new Date();
+
+  // ⭐ 這裡用「上個月」抽獎
+  const year = now.getFullYear();
+  const lastMonth = now.getMonth();               // 0=1月, 所以不 +1
+  const monthKey = `${year}-${String(lastMonth).padStart(2, "0")}`;
+
+  const pool = await Pool.findOne({ month: monthKey });
+  if (!pool) {
+    console.log("❌ 上個月沒有獎池資料，跳過");
+    return;
+  }
+
+  if (pool.contributors.length === 0) {
+    console.log("❌ 上個月沒有貢獻者，跳過");
+    return;
+  }
+
+  // 🎉 抽獎
+  const winner = pool.contributors[
+    Math.floor(Math.random() * pool.contributors.length)
+  ];
+
+  // ⭐ 寫入 PoolResult
+  await PoolResult.create({
+    month: monthKey,
+    amount: pool.amount,
+    winner
+  });
+
+  console.log(`🎉 抽獎完成！${monthKey} 得主：${winner}（${pool.amount}）`);
+
+  // ⭐ 重置池子（開始新月）
+  pool.amount = 0;
+  pool.contributors = [];
+  await pool.save();
+});
+
+
 
 /* ------------------ 管理 API ------------------ */
 app.use("/api/gun-keep", keepRecordRoutes)
@@ -502,6 +552,8 @@ app.use('/api/location', locationRoutes)
 app.use("/api", uploadRoute)
 app.use("/api", analyzeRoute)
 app.use("/api", killRecordRoute)
+app.use("/api/pool", poolRoutes)
+
 
 
 
