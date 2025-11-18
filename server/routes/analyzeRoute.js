@@ -4,14 +4,14 @@ import fetch from "node-fetch";
 import { ImageAnnotatorClient } from "@google-cloud/vision";
 import { User } from "../server.js";
 import KillRecord from "../models/killRecordModel.js";
-import Pool from "../models/Pool.js";   // ⭐ 新增：獎池模型
+import Pool from "../models/Pool.js";
 
 dotenv.config();
 
 const router = express.Router();
 
 /* ===============================
-    🔑 Google Vision 初始化
+   🔑 Google Vision 初始化
 ================================ */
 const client = new ImageAnnotatorClient({
   credentials: {
@@ -22,17 +22,7 @@ const client = new ImageAnnotatorClient({
 });
 
 /* ===============================
-    🔍 移除搶旗亂碼
-================================ */
-function trimModeTag(text) {
-  return text.replace(
-    /[\(\[\{〈【『「][^)\]\}〉】』」]{0,20}搶旗生存戰[^)\]\}〉】』」]{0,20}[\)\]\}〉】』」]?/g,
-    ""
-  );
-}
-
-/* ===============================
-    🔍 名稱乾淨化
+   🔍 名稱清理
 ================================ */
 function cleanName(name) {
   if (!name) return "";
@@ -44,67 +34,52 @@ function cleanName(name) {
     .trim();
 }
 
-function isSamePlayer(a, b) {
-  return cleanName(a) === cleanName(b);
-}
+const isSamePlayer = (a, b) => cleanName(a) === cleanName(b);
 
 /* ===============================
-    🔫 武器名單
+   🔍 抓模式（括號最後）
 ================================ */
-const GUN_LIST = [
-  "手槍","戰鬥手槍","重型手槍","小型衝鋒槍","削短型霰彈槍",
-  "衝鋒槍","突擊步槍","卡賓步槍","射手步槍","雙管霰彈霰彈槍",
-  "重型左輪手槍","突擊衝鋒槍","高階步槍","狙擊槍","煙火發射器",
-  "0.5口徑手槍","戰鬥自衛衝鋒槍","衝鋒手槍","射手手槍","泵動式霰彈槍",
-  "迷你衝鋒槍","古森柏衝鋒槍","衝鋒霰彈槍","射手步槍MKII","重型狙擊槍",
-  "戰鬥機關槍MKII","戰鬥機關槍MkII","戰鬥機關槍Mkii","戰鬥機關槍MKIl","戰鬥機關槍MkIl",
-  "特製卡賓步槍", "穿甲手槍"
-];
+function extractMode(line) {
+  const match = line.match(/\((.*?)\)\s*$/);
+  return match ? match[1].trim() : "";
+}
 
 /* ===============================
-    🧹 全形轉半形 + 日期修正
+   🔍 取出第一個(#)與第二個(#)
 ================================ */
-function toHalfWidth(str) {
-  return str.replace(/[\uff01-\uff5e]/g, ch =>
-    String.fromCharCode(ch.charCodeAt(0) - 0xfee0)
-  ).replace(/\u3000/g, " ");
+function parseKillRow(row) {
+  const matches = [...row.matchAll(/(.+?)\(#\d+\)/g)];
+  if (matches.length < 2) return null;
+
+  return {
+    attacker: cleanName(matches[0][1]),
+    victim: cleanName(matches[1][1])
+  };
 }
 
-function normalizeDateString(str) {
-  if (!str) return "";
-  str = toHalfWidth(str);
-  str = str.replace(/[^0-9\/: ]/g, "");
-  str = str.replace(/\/+/g, "/");
-  return str.trim();
-}
+const ALLOWED_MODES = ["搶旗", "槍戰", "警匪", "PK","灰色","廢棄"];
 
 /* ===============================
-    🧠 analyze API
+   🧠 analyze API
 ================================ */
 router.post("/analyze", async (req, res) => {
   try {
     const { imageUrl, uploaderName, bankAccount } = req.body;
 
-    if (!imageUrl || !uploaderName || !bankAccount) {
+    if (!imageUrl || !uploaderName || !bankAccount)
       return res.status(400).json({ error: "缺少必要參數" });
-    }
 
-    if (!/^\d{5}$/.test(bankAccount)) {
+    if (!/^\d{5}$/.test(bankAccount))
       return res.status(400).json({ error: "匯款帳號需為 5 位數字" });
-    }
 
     /* 找玩家 */
     const uploader = await User.findOne({ name: uploaderName });
-    if (!uploader) {
-      return res.status(400).json({ error: "找不到成員" });
-    }
+    if (!uploader) return res.status(400).json({ error: "找不到成員" });
 
     /* 下載圖片 */
     const downloadUrl = imageUrl.replace(".webp", ".png");
     const imgRes = await fetch(downloadUrl);
-    if (!imgRes.ok) {
-      return res.status(400).json({ error: "無法下載圖片" });
-    }
+    if (!imgRes.ok) return res.status(400).json({ error: "無法下載圖片" });
 
     const base64Image = Buffer.from(await imgRes.arrayBuffer()).toString("base64");
 
@@ -114,80 +89,97 @@ router.post("/analyze", async (req, res) => {
     });
 
     const raw = ocrResult.fullTextAnnotation?.text || "";
-    const lines = raw.split("\n");
+    console.log("🔍 OCR RAW:\n", raw);
 
-    /* ===== 日期確認 ===== */
-    const dateLines = lines
-      .map(normalizeDateString)
-      .filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
+    const lines = raw.split("\n").map(l => l.trim()).filter(l => l);
 
-    if (dateLines.length === 0) {
+    /* ===============================
+       🔎 日期確認
+    ================================ */
+    const dateLines = lines.filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
+    if (dateLines.length === 0)
       return res.status(400).json({ error: "截圖缺少日期" });
-    }
 
     const todayTW = new Date().toLocaleDateString("zh-TW", {
       timeZone: "Asia/Taipei"
     });
 
-    if (!dateLines.some(l => l.includes(todayTW))) {
+    if (!dateLines.some(l => l.includes(todayTW)))
       return res.status(400).json({ error: "截圖不是今日紀錄" });
-    }
 
-    /* ===== 擊殺分析 ===== */
+    /* ===============================
+       🔫 擊殺行（最寬鬆）
+================================ */
+    const killLines = lines.filter(l => {
+      const hasHash = /#\d+/.test(l);
+      const hasUse = l.includes("使用");
+      const hasKill = /(擊殺|杀)/.test(l);
+      const hasMode = /\(.*?\)\s*$/.test(l);
+      return hasHash && hasUse && hasKill && hasMode;
+    });
+
+    console.log("🔍 killLines:", killLines);
+
+    /* ===============================
+       🔍 分析邏輯（依你要求）
+================================ */
+    let kills = 0, deaths = 0, mistakes = 0;
+    let hasQiangqi = false;
+    let recordMode = "";
+
+    const cleanUploader = cleanName(uploaderName);
     const allUsers = await User.find({}, "name");
 
-    const killLines = raw.split("\n").filter(l =>
-      l.includes("使用") &&
-      (l.includes("擊") || l.includes("杀") || l.includes("㑆") || l.includes("㓥") || l.includes("㯜"))
-    );
+    for (let row of killLines) {
+      row = row.replace(/\s+/g, " ").trim();
 
-    let kills = 0, deaths = 0, mistakes = 0;
-    const cleanUploader = cleanName(uploaderName);
+      /* 1️⃣ 場地模式 */
+      const mode = extractMode(row);
+      if (!ALLOWED_MODES.some(m => mode.includes(m))) continue;
 
-    for (let line of killLines) {
-      let row = trimModeTag(line.replace(/\s/g, ""));
-      const gunHit = GUN_LIST.find(g => row.includes(g));
-      if (!gunHit) continue;
-
-      const killIndex = Math.max(
-        row.indexOf("擊殺"), row.indexOf("杀"), row.indexOf("㑆"),
-        row.indexOf("㓥"), row.indexOf("㯜")
-      );
-
-      const useIndex = row.indexOf("使用");
-      if (useIndex === -1 || killIndex === -1) continue;
-
-      const attacker = cleanName(row.substring(0, useIndex));
-      const victim = cleanName(row.substring(killIndex + 2));
-
-      const atk = isSamePlayer(attacker, cleanUploader);
-      const vic = isSamePlayer(victim, cleanUploader);
-
-      if (!atk && !vic) continue;
-
-      const friendly = allUsers.some(u => isSamePlayer(u.name, victim));
-
-      if (atk) {
-        if (friendly) mistakes++;
-        else kills++;
+      if (mode.includes("搶旗")) {
+        hasQiangqi = true;
+        recordMode = mode;
       }
 
-      if (vic) deaths++;
+      /* 2️⃣ attacker / victim */
+      const parsed = parseKillRow(row);
+      if (!parsed) continue;
+
+      const { attacker, victim } = parsed;
+
+      const isSelfAttacker = isSamePlayer(attacker, cleanUploader);
+      const isVictimInDB = allUsers.some(u => isSamePlayer(u.name, victim));
+
+      /* ⭐⭐⭐⭐⭐ 你要的核心邏輯 ⭐⭐⭐⭐⭐ */
+
+      // A. 本人是攻擊者
+      if (isSelfAttacker) {
+        if (isVictimInDB) mistakes++;   // 誤殺
+        else kills++;                   // 擊殺
+        continue;
+      }
+
+      // B. 本人不是攻擊者 → 死亡
+      deaths++;
     }
 
-    /* 💰 金額 */
-    const PRICE_KILL = 100000;
-    const totalMoney = kills * PRICE_KILL;
-    const moneyText = totalMoney >= 10000 ? `${totalMoney / 10000}W` : `${totalMoney}`;
+    /* ===============================
+       💰 計算金額（你要求的版本）
+================================ */
+    const totalMoney =
+      kills * 100000 +    // 每擊殺 +10 萬
+      deaths * 50000 +    // 每死亡 +5 萬
+      0;                  // 誤殺暫時 +0（可之後調整）
 
-    /* ======================================================
-       🎁 累積獎池：每 kill +50,000，並記錄貢獻者
-    ====================================================== */
+    /* ===============================
+       🏆 當月獎池（保持原有邏輯）
+================================ */
     const now = new Date();
-    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const monthKey =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     let pool = await Pool.findOne({ month: monthKey });
-
     if (!pool) {
       pool = await Pool.create({
         month: monthKey,
@@ -196,66 +188,64 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
-    const POOL_ADD_PER_KILL = 50000;
-    pool.amount += kills * POOL_ADD_PER_KILL;
-
-    if (!pool.contributors.includes(uploaderName)) {
+    pool.amount += kills * 50000; // 原本規則不動
+    if (!pool.contributors.includes(uploaderName))
       pool.contributors.push(uploaderName);
-    }
+    await pool.save();
 
-    await pool.save();  // ⭐ 寫入資料庫
-
-    /* 🗃 寫入擊殺紀錄 */
-    const record = await KillRecord.create({
+    /* ===============================
+       🗃 寫入 DB
+================================ */
+    await KillRecord.create({
       uploader: uploaderName,
       guild: uploader.guild,
       kills,
       deaths,
       mistakes,
       money: totalMoney,
+      mode: recordMode,
       bankAccount,
       imageUrl
     });
 
-    /* 📢 Discord Webhook */
+    /* ===============================
+       📢 傳到 Discord Webhook
+================================ */
     try {
-      const webhookUrl = process.env.DISCORD_KILL_WEBHOOK;
+      if (process.env.DISCORD_KILL_WEBHOOK) {
+        await fetch(process.env.DISCORD_KILL_WEBHOOK, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: `🔫 **擊殺結算**
+玩家：${uploaderName}
+幫會：${uploader.guild}
 
-      const dcPayload = {
-        username: "Killshot Bot",
-        embeds: [
-          {
-            title: "💸 玩家擊殺結算通知",
-            color: 0x00d1ff,
-            fields: [
-              { name: "👤 玩家", value: uploaderName, inline: true },
-              { name: "💰 本次獎勵", value: moneyText, inline: true },
-              { name: "🏦 匯款帳號（5碼）", value: bankAccount, inline: true }
-            ],
-            timestamp: new Date()
-          }
-        ]
-      };
+擊殺：${kills}
+死亡：${deaths}
+誤殺：${mistakes}
 
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dcPayload)
-      });
+💰 金額：${totalMoney} 元
+📨 匯款帳號：${bankAccount}`
+          })
+        });
+      }
     } catch (err) {
-      console.error("❌ Discord Webhook 發送錯誤：", err);
+      console.error("❌ Webhook 傳送失敗", err);
     }
 
+    /* ===============================
+       📤 回傳前端
+================================ */
     return res.json({
       success: true,
-      savedId: record._id,
+      ocrRaw: raw,
       uploader: uploaderName,
       guild: uploader.guild,
       kills,
       deaths,
       mistakes,
       money: totalMoney,
-      moneyText,
       bankAccount
     });
 
