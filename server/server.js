@@ -19,6 +19,8 @@ import killRecordRoute from "./routes/killRecordRoute.js"
 import poolRoutes from "./routes/pool.js"
 import Pool from "./models/Pool.js"
 import injectionRoute from "./routes/injectionRoute.js";
+import checkinRoute from "./routes/checkinRoute.js";
+
 
 
 
@@ -557,6 +559,8 @@ app.use("/api", analyzeRoute)
 app.use("/api", killRecordRoute)
 app.use("/api/pool", poolRoutes)
 app.use("/injection", verifyToken, injectionRoute);
+app.use("/api/checkin", verifyToken, checkinRoute);
+
 
 
 
