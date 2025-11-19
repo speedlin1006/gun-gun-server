@@ -57,7 +57,7 @@ function parseKillRow(row) {
   };
 }
 
-const ALLOWED_MODES = ["搶旗", "槍戰", "警匪", "PK","灰色","廢棄"];
+const ALLOWED_MODES = ["搶旗", "槍戰", "警匪", "PK"];
 
 /* ===============================
    🧠 analyze API
