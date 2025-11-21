@@ -169,7 +169,7 @@ router.post("/analyze", async (req, res) => {
 ================================ */
     const totalMoney =
       kills * 100000 +    // 每擊殺 +10 萬
-      deaths * 50000 +    // 每死亡 +5 萬
+      deaths * 20000 +    // 每死亡 +5 萬
       0;                  // 誤殺暫時 +0（可之後調整）
 
     /* ===============================
@@ -188,7 +188,7 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
-    pool.amount += kills * 50000; // 原本規則不動
+    pool.amount += kills * 20000; // 原本規則不動
     if (!pool.contributors.includes(uploaderName))
       pool.contributors.push(uploaderName);
     await pool.save();

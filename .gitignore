@@ -8,5 +8,5 @@ dist/
 
 
 # git add .
-# git commit -m "領地槍購買方式更改+增加預估日期" 
+# git commit -m "修改找位置功能" 
 # git push
