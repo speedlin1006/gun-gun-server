@@ -45,7 +45,7 @@ function extractMode(line) {
 }
 
 /* ===============================
-   🔍 取出第一個(#)與第二個(#)
+   🔍 擷取 (#123) → name
 ================================ */
 function parseKillRow(row) {
   const matches = [...row.matchAll(/(.+?)\(#\d+\)/g)];
@@ -64,7 +64,7 @@ const ALLOWED_MODES = ["搶旗", "槍戰", "警匪", "PK"];
 ================================ */
 router.post("/analyze", async (req, res) => {
   try {
-    const { imageUrl, uploaderName, bankAccount } = req.body;
+    const { imageUrl, uploaderName, bankAccount, guildNameText } = req.body;
 
     if (!imageUrl || !uploaderName || !bankAccount)
       return res.status(400).json({ error: "缺少必要參數" });
@@ -94,6 +94,26 @@ router.post("/analyze", async (req, res) => {
     const lines = raw.split("\n").map(l => l.trim()).filter(l => l);
 
     /* ===============================
+       🔒 檢查 OCR 是否含玩家名稱 + 幫會名稱
+    ================================ */
+    const mergedOCR = raw.replace(/\s+/g, ""); // 去掉所有空白
+    
+    const cleanUploader = cleanName(uploaderName);
+    const cleanGuild = cleanName(guildNameText || "");
+
+    if (!mergedOCR.includes(cleanUploader)) {
+      return res.status(400).json({
+        error: "截圖中未找到玩家名稱，請確認是否截到自己的擊殺紀錄。"
+      });
+    }
+
+    if (cleanGuild && !mergedOCR.includes(cleanGuild)) {
+      return res.status(400).json({
+        error: "截圖中未找到幫會名稱，請確認是否截到正確畫面。"
+      });
+    }
+
+    /* ===============================
        🔎 日期確認
     ================================ */
     const dateLines = lines.filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
@@ -108,8 +128,8 @@ router.post("/analyze", async (req, res) => {
       return res.status(400).json({ error: "截圖不是今日紀錄" });
 
     /* ===============================
-       🔫 擊殺行（最寬鬆）
-================================ */
+       🔫 擊殺行
+    ================================ */
     const killLines = lines.filter(l => {
       const hasHash = /#\d+/.test(l);
       const hasUse = l.includes("使用");
@@ -120,29 +140,19 @@ router.post("/analyze", async (req, res) => {
 
     console.log("🔍 killLines:", killLines);
 
-    /* ===============================
-       🔍 分析邏輯（依你要求）
-================================ */
     let kills = 0, deaths = 0, mistakes = 0;
-    let hasQiangqi = false;
     let recordMode = "";
 
-    const cleanUploader = cleanName(uploaderName);
     const allUsers = await User.find({}, "name");
 
     for (let row of killLines) {
       row = row.replace(/\s+/g, " ").trim();
 
-      /* 1️⃣ 場地模式 */
       const mode = extractMode(row);
       if (!ALLOWED_MODES.some(m => mode.includes(m))) continue;
 
-      if (mode.includes("搶旗")) {
-        hasQiangqi = true;
-        recordMode = mode;
-      }
+      if (!recordMode) recordMode = mode;
 
-      /* 2️⃣ attacker / victim */
       const parsed = parseKillRow(row);
       if (!parsed) continue;
 
@@ -151,30 +161,26 @@ router.post("/analyze", async (req, res) => {
       const isSelfAttacker = isSamePlayer(attacker, cleanUploader);
       const isVictimInDB = allUsers.some(u => isSamePlayer(u.name, victim));
 
-      /* ⭐⭐⭐⭐⭐ 你要的核心邏輯 ⭐⭐⭐⭐⭐ */
-
-      // A. 本人是攻擊者
       if (isSelfAttacker) {
-        if (isVictimInDB) mistakes++;   // 誤殺
-        else kills++;                   // 擊殺
+        if (isVictimInDB) mistakes++;
+        else kills++;
         continue;
       }
 
-      // B. 本人不是攻擊者 → 死亡
       deaths++;
     }
 
     /* ===============================
-       💰 計算金額（你要求的版本）
-================================ */
+       💰 計算金額
+    ================================ */
     const totalMoney =
-      kills * 100000 +    // 每擊殺 +10 萬
-      deaths * 20000 +    // 每死亡 +5 萬
-      0;                  // 誤殺暫時 +0（可之後調整）
+      kills * 100000 +
+      deaths * 50000 +
+      0;
 
     /* ===============================
-       🏆 當月獎池（保持原有邏輯）
-================================ */
+       🏆 當月獎池更新
+    ================================ */
     const now = new Date();
     const monthKey =
       `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -188,14 +194,14 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
-    pool.amount += kills * 20000; // 原本規則不動
+    pool.amount += kills * 20000;
     if (!pool.contributors.includes(uploaderName))
       pool.contributors.push(uploaderName);
     await pool.save();
 
     /* ===============================
        🗃 寫入 DB
-================================ */
+    ================================ */
     await KillRecord.create({
       uploader: uploaderName,
       guild: uploader.guild,
@@ -209,8 +215,8 @@ router.post("/analyze", async (req, res) => {
     });
 
     /* ===============================
-       📢 傳到 Discord Webhook
-================================ */
+       📢 Discord Webhook
+    ================================ */
     try {
       if (process.env.DISCORD_KILL_WEBHOOK) {
         await fetch(process.env.DISCORD_KILL_WEBHOOK, {
@@ -236,7 +242,7 @@ router.post("/analyze", async (req, res) => {
 
     /* ===============================
        📤 回傳前端
-================================ */
+    ================================ */
     return res.json({
       success: true,
       ocrRaw: raw,
