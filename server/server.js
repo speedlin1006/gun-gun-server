@@ -36,6 +36,7 @@ import checkinRoute from "./routes/checkinRoute.js";
 
 dotenv.config()
 // console.log("CLOUDINARY_API_KEY =", process.env.CLOUDINARY_API_KEY);
+// console.log("📩 GPS Webhook:", process.env.DISCORD_WEBHOOK_GPS);
 
 
 const app = express()
@@ -313,39 +314,7 @@ app.post("/api/login", loginLimiter, async (req, res) => {
 
 
 
-/* ------------------ 📍 登入後上傳位置 ------------------ */
-app.post("/api/location", async (req, res) => {
-  try {
-    const { account, name, latitude, longitude } = req.body
-    if (!account || latitude == null || longitude == null)
-      return res.status(400).json({ success: false, message: "缺少必要欄位" })
 
-    const lat = Number(latitude)
-    const lon = Number(longitude)
-    if (isNaN(lat) || isNaN(lon))
-      return res.status(400).json({ success: false, message: "座標格式錯誤" })
-
-    // 若前端有提供 name 就用它，否則查資料庫
-    let displayName = name
-    if (!displayName) {
-      const user = await User.findOne({ account })
-      displayName = user ? user.name : "未知使用者"
-    }
-
-    await LoginLocation.create({
-      account,
-      name: displayName, // ✅ 寫入名稱
-      latitude: lat,
-      longitude: lon,
-      recordTime: new Date()
-    })
-
-    res.json({ success: true, message: "✅ 已儲存位置", name: displayName })
-  } catch (err) {
-    console.error("位置儲存失敗：", err)
-    res.status(500).json({ success: false, message: "伺服器錯誤" })
-  }
-})
 
 
 
