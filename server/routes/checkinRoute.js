@@ -186,7 +186,7 @@ router.get("/all", async (req, res) => {
     });
 
     // ⭐ 依階級排序
-    const rank = { leader: 1, officer: 2, member: 3 };
+    const rank = { leader: 1, officer: 2, member: 3,small: 4 };
     list.sort((a, b) => {
       const diff = rank[a.role] - rank[b.role];
       return diff !== 0 ? diff : Number(a.guild) - Number(b.guild);
