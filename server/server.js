@@ -12,7 +12,8 @@ import configRoute from "./routes/configRoute.js"
 import authRoutes from "./routes/auth.js"
 import accountRoutes from "./routes/accountRoutes.mjs"
 import leaveRoutes from "./routes/leaveRoutes.js"
-import locationRoutes from './routes/locationRoutes.js'
+// import locationRoutes from './routes/locationRoutes.js'
+import createLocationRoutes from "./routes/locationRoutes.js";
 import uploadRoute from "./routes/uploadRoute.js"
 import analyzeRoute from "./routes/analyzeRoute.js"
 import killRecordRoute from "./routes/killRecordRoute.js"
@@ -101,7 +102,7 @@ const userSchema = new mongoose.Schema(
     password: { type: String, required: true },
     name: { type: String, required: true },
     guild: { type: String, required: true },
-    role: { type: String, enum: ["leader", "officer", "member","small"], default: "member" }
+    role: { type: String, enum: ["leader", "officer", "member","small"], default: "member" }//多加小號
   },
   { timestamps: true }
 )
@@ -522,7 +523,8 @@ app.use("/api/config", configRoute)
 app.use("/api/auth", authRoutes)
 app.use("/api/account", accountRoutes)
 app.use("/api/leave", leaveRoutes)
-app.use('/api/location', locationRoutes)
+// app.use('/api/location', locationRoutes)
+app.use("/api/location", createLocationRoutes(LoginLocation));
 app.use("/api", uploadRoute)
 app.use("/api", analyzeRoute)
 app.use("/api", killRecordRoute)
