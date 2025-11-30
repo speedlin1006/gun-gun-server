@@ -114,18 +114,24 @@ router.post("/analyze", async (req, res) => {
     }
 
     /* ===============================
-       🔎 日期確認
+      🔎 日期確認（修正兩位數日期）
     ================================ */
     const dateLines = lines.filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
+
     if (dateLines.length === 0)
       return res.status(400).json({ error: "截圖缺少日期" });
 
-    const todayTW = new Date().toLocaleDateString("zh-TW", {
-      timeZone: "Asia/Taipei"
-    });
+    // 產生兩位數日期：2025/12/01
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const todayTW = `${yyyy}/${mm}/${dd}`; 
 
+    // 比對 OCR 中是否包含今日
     if (!dateLines.some(l => l.includes(todayTW)))
       return res.status(400).json({ error: "截圖不是今日紀錄" });
+
 
     /* ===============================
        🔫 擊殺行
@@ -181,9 +187,9 @@ router.post("/analyze", async (req, res) => {
     /* ===============================
        🏆 當月獎池更新
     ================================ */
-    const now = new Date();
+    const now2 = new Date();
     const monthKey =
-      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      `${now2.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
     let pool = await Pool.findOne({ month: monthKey });
     if (!pool) {

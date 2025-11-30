@@ -1,9 +1,9 @@
 import mongoose from "mongoose";
 
 const poolSchema = new mongoose.Schema({
-  month: { type: String, required: true },        // 例如 "2025-01"
-  amount: { type: Number, default: 0 },           // 當前獎池金額
-  contributors: { type: [String], default: [] }   // 有貢獻的玩家名字
+  month: { type: String, required: true },        // "2025-11"
+  amount: { type: Number, default: 0 },           // 當月累積金額
+  contributors: { type: [String], default: [] }   // 當月貢獻者
 });
 
 export default mongoose.model("Pool", poolSchema, "pools");
