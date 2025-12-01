@@ -8,5 +8,5 @@ dist/
 
 
 # git add .
-# git commit -m "新增首頁及修改抓位置導入資料庫" 
+# git commit -m "新增物資總動員抽獎機制" 
 # git push
