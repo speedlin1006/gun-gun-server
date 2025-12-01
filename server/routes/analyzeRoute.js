@@ -270,4 +270,18 @@ router.post("/analyze", async (req, res) => {
   }
 });
 
+/* ===============================
+   💰 計算金額 + 搶旗生存戰參加獎
+================================ */
+let totalMoney =
+  kills * 100000 +
+  deaths * 50000 +
+  0;
+
+// ⭐ 搶旗生存戰 → 參加獎 +300,000
+if (recordMode.includes("搶旗生存戰")) {
+  totalMoney += 300000;
+}
+
+
 export default router;
