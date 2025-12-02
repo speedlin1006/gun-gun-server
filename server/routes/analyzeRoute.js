@@ -181,7 +181,6 @@ router.post("/analyze", async (req, res) => {
       ================================ */
       let totalMoney =
         kills * 100000 +
-        deaths * 50000 +
         0;
 
       // ⭐ 搶旗生存戰 → 參加獎 +300,000

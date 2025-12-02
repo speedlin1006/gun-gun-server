@@ -8,5 +8,5 @@ dist/
 
 
 # git add .
-# git commit -m "新增PVP搶旗參加獎" 
+# git commit -m "調整PVP死亡計算價格" 
 # git push
