@@ -7,6 +7,33 @@ const router = express.Router();
 const CHECKIN_WEBHOOK = process.env.CHECKIN_WEBHOOK;
 
 /* -----------------------------------
+    取得台灣 yyyy-mm-dd 相關資訊
+----------------------------------- */
+function getTaiwanDateInfo() {
+  const now = new Date();
+
+  // 轉成 Asia/Taipei
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+
+  const formatted = formatter.format(now); // ex: 2025-12-03
+
+  const [year, month, day] = formatted.split("-");
+
+  return {
+    year: Number(year),
+    month: Number(month),
+    day: Number(day),
+    fullDate: formatted,
+    yearMonth: `${year}-${month}`
+  };
+}
+
+/* -----------------------------------
     取得當月天數
 ----------------------------------- */
 function getDaysInMonth(year, month) {
@@ -40,18 +67,14 @@ async function sendDiscordCompleted({ name, month, checked, total }) {
 }
 
 /* -----------------------------------
-    ① 今日簽到
+    ① 今日簽到（台灣時間版）
 ----------------------------------- */
 router.post("/today", async (req, res) => {
   try {
     const user = req.user;
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const day = String(today.getDate()).padStart(2, "0");
 
-    const yearMonth = `${year}-${String(month).padStart(2, "0")}`;
-    const todayString = `${yearMonth}-${day}`;
+    const { year, month, fullDate, yearMonth } = getTaiwanDateInfo();
+
     const totalDays = getDaysInMonth(year, month);
 
     let record = await CheckinRecord.findOne({
@@ -72,18 +95,21 @@ router.post("/today", async (req, res) => {
       });
     }
 
-    if (record.dates.includes(todayString)) {
+    // 防止重複簽到
+    if (record.dates.includes(fullDate)) {
       return res.json({
         success: false,
         message: "今日已簽到"
       });
     }
 
-    record.dates.push(todayString);
+    // 今日簽到
+    record.dates.push(fullDate);
     record.checkedDays = record.dates.length;
 
     const progress = record.checkedDays / record.totalDays;
 
+    // 達成 90%
     if (progress >= 0.9 && !record.rewardSent) {
       record.completed = true;
       record.rewardSent = true;
@@ -110,16 +136,12 @@ router.post("/today", async (req, res) => {
 });
 
 /* -----------------------------------
-    ② 個人本月簽到狀態
+    ② 個人本月簽到狀態（台灣時間版）
 ----------------------------------- */
 router.get("/me", async (req, res) => {
   try {
     const user = req.user;
-
-    const today = new Date();
-    const yearMonth = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}`;
+    const { yearMonth } = getTaiwanDateInfo();
 
     const record = await CheckinRecord.findOne({
       account: user.account,
@@ -137,7 +159,7 @@ router.get("/me", async (req, res) => {
 });
 
 /* -----------------------------------
-    ③ 管理者：顯示所有成員當月狀態（未簽到也顯示）
+    ③ 管理者：顯示所有成員當月狀態
 ----------------------------------- */
 router.get("/all", async (req, res) => {
   try {
@@ -150,24 +172,19 @@ router.get("/all", async (req, res) => {
       });
     }
 
-    // ⭐ 取得所有 User
     const User = mongoose.model("User");
     const users = await User.find({}, "account name guild role");
 
-    // ⭐ 該月的所有簽到紀錄
     const records = await CheckinRecord.find({ yearMonth: month });
 
-    // map 方便查詢
     const recordMap = {};
     records.forEach((r) => {
       recordMap[r.account] = r;
     });
 
-    // ⭐ 計算該月天數
     const [y, m] = month.split("-");
-    const totalDays = new Date(Number(y), Number(m), 0).getDate();
+    const totalDays = getDaysInMonth(Number(y), Number(m));
 
-    // ⭐ 每位成員都回傳完整資訊
     const list = users.map((u) => {
       const rec = recordMap[u.account];
 
@@ -177,16 +194,13 @@ router.get("/all", async (req, res) => {
         name: u.name,
         guild: u.guild,
         role: u.role,
-
-        // 有紀錄才帶入，沒有就顯示 0
         checkedDays: rec ? rec.checkedDays : 0,
-        totalDays: totalDays,
+        totalDays,
         dates: rec ? rec.dates : []
       };
     });
 
-    // ⭐ 依階級排序
-    const rank = { leader: 1, officer: 2, member: 3,small: 4 };
+    const rank = { leader: 1, officer: 2, member: 3, small: 4 };
     list.sort((a, b) => {
       const diff = rank[a.role] - rank[b.role];
       return diff !== 0 ? diff : Number(a.guild) - Number(b.guild);
@@ -196,25 +210,19 @@ router.get("/all", async (req, res) => {
       success: true,
       list
     });
-
   } catch (err) {
     console.error("checkin /all error:", err);
     res.status(500).json({ success: false, message: "伺服器錯誤" });
   }
 });
 
-
 /* -----------------------------------
-    ④ 個人本月簽到狀態（前端 calendar 用）
+    ④ 個人月曆狀態（台灣時間版）
 ----------------------------------- */
 router.get("/month", async (req, res) => {
   try {
     const user = req.user;
-
-    const today = new Date();
-    const yearMonth = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
-    ).padStart(2, "0")}`;
+    const { yearMonth } = getTaiwanDateInfo();
 
     const record = await CheckinRecord.findOne({
       account: user.account,
