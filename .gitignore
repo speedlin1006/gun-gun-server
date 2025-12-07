@@ -8,5 +8,5 @@ dist/
 
 
 # git add .
-# git commit -m "調整簽到抓的時間，改成台灣時間" 
+# git commit -m "調PVP回報到抓的時間，改成台灣時間+小明畫質判斷" 
 # git push

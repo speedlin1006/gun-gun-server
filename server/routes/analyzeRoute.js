@@ -48,7 +48,10 @@ function extractMode(line) {
    🔍 擷取 (#123) → name
 ================================ */
 function parseKillRow(row) {
-  const matches = [...row.matchAll(/(.+?)\(#\d+\)/g)];
+  // 支援各種括號： ( ) { } （ ）
+  // 支援 #123 或缺 # 情況
+  const matches = [...row.matchAll(/(.+?)[({（]#?\d+[)}）]/g)];
+
   if (matches.length < 2) return null;
 
   return {
@@ -56,6 +59,7 @@ function parseKillRow(row) {
     victim: cleanName(matches[1][1])
   };
 }
+
 
 const ALLOWED_MODES = ["搶旗", "槍戰", "警匪", "PK"];
 
@@ -114,23 +118,28 @@ router.post("/analyze", async (req, res) => {
     }
 
     /* ===============================
-      🔎 日期確認（修正兩位數日期）
+      🔎 日期確認（台灣時區版本）
     ================================ */
     const dateLines = lines.filter(l => /\d{4}\/\d{1,2}\/\d{1,2}/.test(l));
 
     if (dateLines.length === 0)
       return res.status(400).json({ error: "截圖缺少日期" });
 
-    // 產生兩位數日期：2025/12/01
-    const now = new Date();
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const todayTW = `${yyyy}/${mm}/${dd}`; 
+    // ✔ 使用台灣時區生成「今日日期」
+    const formatter = new Intl.DateTimeFormat("zh-TW", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    });
 
-    // 比對 OCR 中是否包含今日
-    if (!dateLines.some(l => l.includes(todayTW)))
+    // 例如：2025/12/07（自動補兩位數）
+    const todayTW = formatter.format(new Date());
+
+    // ⭐ OCR 是逐行比對 → 找出同一天的截圖
+    if (!dateLines.some(l => l.includes(todayTW))) {
       return res.status(400).json({ error: "截圖不是今日紀錄" });
+    }
 
 
     /* ===============================
