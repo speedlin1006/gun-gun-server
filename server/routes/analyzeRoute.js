@@ -204,7 +204,7 @@ router.post("/analyze", async (req, res) => {
     ================================ */
     const now2 = new Date();
     const monthKey =
-      `${now2.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+      `${now2.getFullYear()}-${String(now2.getMonth() + 1).padStart(2, "0")}`;
 
     let pool = await Pool.findOne({ month: monthKey });
     if (!pool) {
