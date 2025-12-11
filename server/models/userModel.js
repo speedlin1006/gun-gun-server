@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["leader", "officer", "member"], // 只允許這三種
+    enum: ["leader", "officer", "member","small"], // 只允許這四種
     default: "member",                     // 沒有給就預設為 member
     required: true
   }

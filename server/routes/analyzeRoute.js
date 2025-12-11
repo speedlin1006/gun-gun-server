@@ -200,7 +200,7 @@ router.post("/analyze", async (req, res) => {
 
 
     /* ===============================
-       🏆 當月獎池更新
+   🏆 當月獎池更新（含擊殺貢獻）
     ================================ */
     const now2 = new Date();
     const monthKey =
@@ -215,10 +215,23 @@ router.post("/analyze", async (req, res) => {
       });
     }
 
+    // ⭐ 1. 加入獎池金額（跟抽獎無關）
     pool.amount += kills * 20000;
-    if (!pool.contributors.includes(uploaderName))
-      pool.contributors.push(uploaderName);
+
+    // ⭐ 2. 加入抽獎票數（只算有效擊殺）
+    let contributor = pool.contributors.find(c => c.name === uploaderName);
+
+    if (!contributor) {
+      pool.contributors.push({
+        name: uploaderName,
+        kills: kills // 本次擊殺直接加入本月貢獻
+      });
+    } else {
+      contributor.kills += kills; // 本月累積
+    }
+
     await pool.save();
+
 
     /* ===============================
        🗃 寫入 DB

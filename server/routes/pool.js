@@ -10,35 +10,50 @@ const router = express.Router();
 ====================================================== */
 router.get("/status", async (req, res) => {
   try {
-    // ⭐ 若前端有帶月份，就用前端的
-    const monthKey = req.query.month || (() => {
-      const now = new Date();
-      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    })();
+    const { month } = req.query;
+    if (!month) return res.json({ success: false, error: "缺少月份" });
 
-    const pool = await Pool.findOne({ month: monthKey });
+    const pool = await Pool.findOne({ month });
 
     if (!pool) {
       return res.json({
         success: true,
-        month: monthKey,
         amount: 0,
-        contributors: [],
-        message: "此月份沒有資料"
+        contributors: []
       });
+    }
+
+    // ⭐ 確保 contributors 一定是物件
+    let updated = false;
+
+    const contributors = pool.contributors.map(c => {
+      if (typeof c === "string") {
+        updated = true;
+        return { name: c, kills: 0 };
+      }
+      return c;
+    });
+
+    // ⭐ 如果有舊資料 → 寫回 DB（永久修復）
+    if (updated) {
+      pool.contributors = contributors;
+      await pool.save();
+      console.log(`🔧 自動修復 contributors 格式（${month}）已寫回資料庫`);
     }
 
     return res.json({
       success: true,
-      month: pool.month,
       amount: pool.amount,
-      contributors: pool.contributors
+      contributors
     });
 
   } catch (err) {
-    res.status(500).json({ error: "無法取得獎池資訊", detail: err.message });
+    console.error("獎池查詢錯誤:", err);
+    res.status(500).json({ success: false, error: "伺服器錯誤" });
   }
 });
+
+
 
 
 
