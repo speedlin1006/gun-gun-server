@@ -168,4 +168,55 @@ router.get("/winners", async (req, res) => {
   res.json(winners);
 });
 
+
+/* ================================
+   GET /api/lucky/grouped
+   ⭐ 每人每輪擁有的號碼
+================================ */
+router.get("/grouped", async (req, res) => {
+  try {
+    const { round } = req.query;
+
+    const match = {};
+    if (round) {
+      match.round = Number(round);
+    }
+
+    const data = await LuckyTicket.aggregate([
+      { $match: match },
+
+      {
+        $group: {
+          _id: {
+            name: "$name",
+            guild: "$guild",
+            round: "$round"
+          },
+          tickets: { $push: "$ticketNumber" }
+        }
+      },
+
+      {
+        $project: {
+          _id: 0,
+          name: "$_id.name",
+          guild: "$_id.guild",
+          round: "$_id.round",
+          tickets: 1,
+          count: { $size: "$tickets" } // ⭐ 幫你多做一個數量
+        }
+      },
+
+      {
+        $sort: { round: -1, count: -1 } // ⭐ 同輪誰最多排前面
+      }
+    ]);
+
+    res.json({ success: true, data });
+
+  } catch (err) {
+    console.error("Grouped error:", err);
+    res.status(500).json({ success: false, msg: "系統錯誤" });
+  }
+});
 export default router;
