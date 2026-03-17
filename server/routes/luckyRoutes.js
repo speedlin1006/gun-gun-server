@@ -6,7 +6,14 @@ import LuckyWinner from "../models/LuckyWinner.js";
 const router = express.Router();
 
 /* ================================
-   初始化 LuckyStatus（如果沒有）
+   🎯 規則設定（之後改這裡就好）
+================================ */
+const TICKET_PRICE = 1000000;    // 100萬一張
+const POOL_PER_TICKET = 100000;  // 每張 +10萬
+const DRAW_THRESHOLD = 50;       // 50張抽一次
+
+/* ================================
+   初始化 LuckyStatus
 ================================ */
 async function getStatus() {
   let status = await LuckyStatus.findOne();
@@ -14,7 +21,8 @@ async function getStatus() {
     status = await LuckyStatus.create({
       round: 1,
       totalTickets: 0,
-      totalAmount: 0
+      totalAmount: 0,
+      drawing: false
     });
   }
   return status;
@@ -22,31 +30,49 @@ async function getStatus() {
 
 /* ================================
    POST /api/lucky/add
-   發號碼 + 丟金額 + 自動抽獎
 ================================ */
 router.post("/add", async (req, res) => {
   try {
     const { guild, name, amountWan } = req.body;
 
-    if (!guild || !name || !amountWan) {
-      return res.status(400).json({ success: false, msg: "缺少資料" });
+    if (!guild || !name || isNaN(amountWan)) {
+      return res.status(400).json({ success: false, msg: "資料錯誤" });
     }
 
-    const amount = Number(amountWan) * 10000;   // 轉換成元
-    const ticketsToGive = Math.floor(amount / 500000); // 每 50 萬一張票
+    const amount = Number(amountWan) * 10000;
+    const ticketsToGive = Math.floor(amount / TICKET_PRICE);
 
-    let status = await getStatus();
+    if (ticketsToGive <= 0) {
+      return res.status(400).json({ success: false, msg: "金額不足100萬" });
+    }
 
-    const startNumber = status.totalTickets + 1;
-    const endNumber = status.totalTickets + ticketsToGive;
+    /* ============================
+       ⭐ 原子更新（避免重號）
+    ============================ */
+    const status = await LuckyStatus.findOneAndUpdate(
+      {},
+      {
+        $inc: {
+          totalTickets: ticketsToGive,
+          totalAmount: ticketsToGive * POOL_PER_TICKET
+        }
+      },
+      { new: true, upsert: true }
+    );
 
-    let ticketNumbers = [];
+    const endNumber = status.totalTickets;
+    const startNumber = endNumber - ticketsToGive + 1;
 
-    // 建立票券（有幾張就建立幾張）
+    /* ============================
+       ⭐ 批次建立票券
+    ============================ */
+    const ticketsData = [];
+    const ticketNumbers = [];
+
     for (let n = startNumber; n <= endNumber; n++) {
       ticketNumbers.push(n);
 
-      await LuckyTicket.create({
+      ticketsData.push({
         ticketNumber: n,
         name,
         guild,
@@ -55,41 +81,60 @@ router.post("/add", async (req, res) => {
       });
     }
 
-    // 更新累積
-    status.totalTickets += ticketsToGive;
-    status.totalAmount += amount;
-    await status.save();
+    await LuckyTicket.insertMany(ticketsData);
 
     let winner = null;
 
-    /* --------------------------
-       ⚠ 如果 crossing 100 → 抽獎
-    --------------------------- */
-    if (status.totalTickets >= 100) {
+    /* ============================
+       ⭐ 抽獎鎖（避免重複抽）
+    ============================ */
+    if (status.totalTickets >= DRAW_THRESHOLD) {
 
-      const tickets = await LuckyTicket.find({ round: status.round });
+      const lock = await LuckyStatus.findOneAndUpdate(
+        {
+          drawing: { $ne: true },
+          totalTickets: { $gte: DRAW_THRESHOLD }
+        },
+        { $set: { drawing: true } },
+        { new: true }
+      );
 
-      if (tickets.length > 0) {
-        const randomIndex = Math.floor(Math.random() * tickets.length);
-        const lucky = tickets[randomIndex];
+      if (lock) {
+        const currentRound = lock.round;
 
-        // 記錄得獎紀錄
-        winner = await LuckyWinner.create({
-          round: status.round,
-          ticketNumber: lucky.ticketNumber,
-          name: lucky.name,
-          guild: lucky.guild,
-          totalTicketsAtMoment: status.totalTickets,
-          totalAmountAtMoment: status.totalAmount
-        });
+        const count = await LuckyTicket.countDocuments({ round: currentRound });
 
-        // 清空票券、重置資料
-        await LuckyTicket.deleteMany({ round: status.round });
+        if (count > 0) {
+          const randomIndex = Math.floor(Math.random() * count);
 
-        status.round += 1;
-        status.totalTickets = 0;
-        status.totalAmount = 0;
-        await status.save();
+          const lucky = await LuckyTicket.findOne({ round: currentRound })
+            .skip(randomIndex);
+
+          winner = await LuckyWinner.create({
+            round: currentRound,
+            ticketNumber: lucky.ticketNumber,
+            name: lucky.name,
+            guild: lucky.guild,
+            totalTicketsAtMoment: lock.totalTickets,
+            totalAmountAtMoment: lock.totalAmount
+          });
+
+          // 清空當前回合票券
+          await LuckyTicket.deleteMany({ round: currentRound });
+
+          // 重置狀態
+          await LuckyStatus.updateOne(
+            { _id: lock._id },
+            {
+              $set: {
+                totalTickets: 0,
+                totalAmount: 0,
+                drawing: false
+              },
+              $inc: { round: 1 }
+            }
+          );
+        }
       }
     }
 

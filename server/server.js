@@ -6,6 +6,7 @@ import * as dotenv from "dotenv";
 import rateLimit from "express-rate-limit"
 import jwt from "jsonwebtoken"
 import fetch from "node-fetch"
+import cron from "node-cron";
 import Gun from "./models/gunModel.js"
 import keepRecordRoutes from "./routes/keepRecordRoutes.js"
 import configRoute from "./routes/configRoute.js"
@@ -18,10 +19,11 @@ import uploadRoute from "./routes/uploadRoute.js"
 import analyzeRoute from "./routes/analyzeRoute.js"
 import killRecordRoute from "./routes/killRecordRoute.js"
 import poolRoutes from "./routes/pool.js"
-import Pool from "./models/Pool.js"
 import injectionRoute from "./routes/injectionRoute.js";
 import checkinRoute from "./routes/checkinRoute.js";
 import luckyRoutes from "./routes/luckyRoutes.js";
+import { drawMonthlyPoolIfNeeded } from "./utils/drawMonthlyPool.js";
+
 
 
 
@@ -473,48 +475,37 @@ app.get("/api/user/:account", async (req, res) => {
 /* ================================
    🎰 每月 1 號 00:10 自動抽獎
 ================================ */
-import cron from "node-cron";
 
+
+/**
+ * ⏰ 每月 1 號 00:10 嘗試抽上個月
+ * - 有醒 → 抽
+ * - 沒醒 → 沒關係，之後 API / server 啟動會補抽
+ */
 cron.schedule("10 0 1 * *", async () => {
-  console.log("⏰ 每月自動抽獎程式啟動");
+  console.log("⏰ cron 嘗試執行每月抽獎");
 
   const now = new Date();
 
-  // ⭐ 這裡用「上個月」抽獎
-  const year = now.getFullYear();
-  const lastMonth = now.getMonth();               // 0=1月, 所以不 +1
-  const monthKey = `${year}-${String(lastMonth).padStart(2, "0")}`;
+  // 正確計算「上個月」（處理跨年）
+  let year = now.getFullYear();
+  let month = now.getMonth(); // 上個月（0 = 1月）
 
-  const pool = await Pool.findOne({ month: monthKey });
-  if (!pool) {
-    console.log("❌ 上個月沒有獎池資料，跳過");
-    return;
+  if (month === 0) {
+    month = 12;
+    year -= 1;
   }
 
-  if (pool.contributors.length === 0) {
-    console.log("❌ 上個月沒有貢獻者，跳過");
-    return;
+  const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+
+  try {
+    // ⭐ 只呼叫「萬無一失的抽獎函式」
+    await drawMonthlyPoolIfNeeded(monthKey);
+  } catch (err) {
+    console.error("❌ cron 抽獎失敗：", err);
   }
-
-  // 🎉 抽獎
-  const winner = pool.contributors[
-    Math.floor(Math.random() * pool.contributors.length)
-  ];
-
-  // ⭐ 寫入 PoolResult
-  await PoolResult.create({
-    month: monthKey,
-    amount: pool.amount,
-    winner
-  });
-
-  console.log(`🎉 抽獎完成！${monthKey} 得主：${winner}（${pool.amount}）`);
-
-  // ⭐ 重置池子（開始新月）
-  pool.amount = 0;
-  pool.contributors = [];
-  await pool.save();
 });
+
 
 
 
