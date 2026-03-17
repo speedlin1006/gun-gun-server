@@ -9,7 +9,7 @@ const router = express.Router();
    🎯 規則設定（之後改這裡就好）
 ================================ */
 const TICKET_PRICE = 1000000;    // 100萬一張
-const POOL_PER_TICKET = 100000;  // 每張 +10萬
+const POOL_PER_TICKET = 200000;  // 每張 +10萬
 const DRAW_THRESHOLD = 50;       // 50張抽一次
 
 /* ================================
